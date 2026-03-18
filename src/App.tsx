@@ -3,14 +3,16 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useAuth } from "@/lib/auth-store";
-import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import PatientsPage from "./pages/PatientsPage";
-import DentalChartPage from "./pages/DentalChartPage";
-import CalendarPage from "./pages/CalendarPage";
-import FinancesPage from "./pages/FinancesPage";
-import SettingsPage from "./pages/SettingsPage";
+import { useAuth } from "@/features/auth/store";
+
+// Feature pages
+import LoginPage from "@/features/auth/components/LoginPage";
+import DashboardPage from "@/features/dashboard/components/DashboardPage";
+import PatientsPage from "@/features/patients/components/PatientsPage";
+import DentalChartPage from "@/features/dental-chart/components/DentalChartPage";
+import CalendarPage from "@/features/appointments/components/CalendarPage";
+import FinancesPage from "@/features/finances/components/FinancesPage";
+import SettingsPage from "@/features/settings/components/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
