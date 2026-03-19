@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { mockStaff } from "@/features/settings/data";
 import type { StaffMember } from "@/features/settings/types";
 import { Plus, User, Building2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 const roleBadge: Record<string, string> = {
   admin: "bg-destructive/10 text-destructive border-destructive/20",
@@ -18,7 +20,39 @@ const roleBadge: Record<string, string> = {
 
 const SettingsPage = () => {
   const { t, lang, setLang } = useI18n();
+  const [loading, setLoading] = useState(true);
   const [staff] = useState<StaffMember[]>(mockStaff);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 400);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleSave = () => {
+    toast({ title: t("common.success"), description: t("settings.saved") });
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <Card className="shadow-card">
+            <CardContent className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -39,7 +73,7 @@ const SettingsPage = () => {
 
           <TabsContent value="clinic" className="mt-6">
             <Card className="shadow-card">
-              <CardContent className="p-6 space-y-4">
+              <CardContent className="p-4 sm:p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("settings.clinicName")}</Label>
@@ -75,7 +109,7 @@ const SettingsPage = () => {
                     </div>
                   </div>
                 </div>
-                <Button className="gradient-primary text-primary-foreground border-0">
+                <Button onClick={handleSave} className="gradient-primary text-primary-foreground border-0">
                   {t("settings.save")}
                 </Button>
               </CardContent>
@@ -86,23 +120,23 @@ const SettingsPage = () => {
             <div className="flex justify-end">
               <Button className="gradient-primary text-primary-foreground border-0 gap-2">
                 <Plus className="w-4 h-4" />
-                {t("settings.addStaff")}
+                <span className="hidden sm:inline">{t("settings.addStaff")}</span>
               </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {staff.map((s) => (
                 <Card key={s.id} className="shadow-card">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <CardContent className="p-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                         <User className="w-5 h-5 text-muted-foreground" />
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{s.name}</p>
-                        <p className="text-xs text-muted-foreground">{s.email}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{s.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{s.email}</p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${roleBadge[s.role]}`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ${roleBadge[s.role]}`}>
                       {t(`settings.${s.role}`)}
                     </span>
                   </CardContent>

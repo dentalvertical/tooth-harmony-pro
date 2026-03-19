@@ -1,5 +1,4 @@
 const uk: Record<string, string> = {
-  // Navigation
   'nav.dashboard': 'Дашборд',
   'nav.patients': 'Пацієнти',
   'nav.calendar': 'Календар',
@@ -8,7 +7,6 @@ const uk: Record<string, string> = {
   'nav.logout': 'Вийти',
   'nav.dentalChart': 'Зубна карта',
 
-  // Login
   'login.title': 'Вхід до системи',
   'login.subtitle': 'Стоматологічна CRM',
   'login.email': 'Електронна пошта',
@@ -16,7 +14,6 @@ const uk: Record<string, string> = {
   'login.submit': 'Увійти',
   'login.forgot': 'Забули пароль?',
 
-  // Dashboard
   'dashboard.title': 'Дашборд',
   'dashboard.revenue': 'Дохід за місяць',
   'dashboard.patients': 'Всього пацієнтів',
@@ -26,7 +23,6 @@ const uk: Record<string, string> = {
   'dashboard.upcomingAppointments': 'Найближчі прийоми',
   'dashboard.revenueChart': 'Дохід за місяцями',
 
-  // Patients
   'patients.title': 'Пацієнти',
   'patients.add': 'Додати пацієнта',
   'patients.search': 'Пошук пацієнтів...',
@@ -41,8 +37,11 @@ const uk: Record<string, string> = {
   'patients.history': 'Історія візитів',
   'patients.notes': 'Нотатки',
   'patients.files': 'Файли',
+  'patients.added': 'Пацієнта успішно додано',
+  'patients.deleted': 'Пацієнта видалено',
+  'patients.deleteConfirmTitle': 'Видалити пацієнта?',
+  'patients.deleteConfirmDesc': 'Цю дію не можна скасувати. Всі дані пацієнта будуть безповоротно видалені.',
 
-  // Dental Chart
   'dental.title': 'Стоматологічна карта',
   'dental.healthy': 'Здоровий',
   'dental.cavity': 'Карієс',
@@ -54,8 +53,8 @@ const uk: Record<string, string> = {
   'dental.procedures': 'Процедури',
   'dental.upper': 'Верхня щелепа',
   'dental.lower': 'Нижня щелепа',
+  'dental.statusChanged': 'Стан зуба оновлено',
 
-  // Calendar
   'calendar.title': 'Календар прийомів',
   'calendar.addAppointment': 'Новий прийом',
   'calendar.day': 'День',
@@ -64,8 +63,8 @@ const uk: Record<string, string> = {
   'calendar.doctor': 'Лікар',
   'calendar.time': 'Час',
   'calendar.procedure': 'Процедура',
+  'calendar.noAppointments': 'Немає прийомів за цей період',
 
-  // Finances
   'finances.title': 'Фінанси',
   'finances.invoices': 'Рахунки',
   'finances.reports': 'Звіти',
@@ -93,7 +92,6 @@ const uk: Record<string, string> = {
   'finances.period': 'Період',
   'finances.invoiceCount': 'Рахунків',
 
-  // Settings
   'settings.title': 'Налаштування',
   'settings.clinic': 'Клініка',
   'settings.staff': 'Персонал',
@@ -107,8 +105,8 @@ const uk: Record<string, string> = {
   'settings.assistant': 'Асистент',
   'settings.language': 'Мова',
   'settings.save': 'Зберегти',
+  'settings.saved': 'Налаштування збережено',
 
-  // Common
   'common.save': 'Зберегти',
   'common.cancel': 'Скасувати',
   'common.delete': 'Видалити',
@@ -118,6 +116,10 @@ const uk: Record<string, string> = {
   'common.noData': 'Даних немає',
   'common.loading': 'Завантаження...',
   'common.confirm': 'Підтвердити',
+  'common.error': 'Помилка',
+  'common.errorMessage': 'Щось пішло не так. Спробуйте ще раз.',
+  'common.retry': 'Повторити',
+  'common.success': 'Успішно',
 };
 
 export default uk;

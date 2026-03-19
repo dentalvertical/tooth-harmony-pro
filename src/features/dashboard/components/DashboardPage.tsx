@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,28 +6,39 @@ import { mockPatients } from "@/features/patients/data";
 import { mockAppointments } from "@/features/appointments/data";
 import { mockRevenueData } from "@/features/dashboard/data";
 import { StatCard } from "./StatCard";
-import { DollarSign, Users, CalendarDays, UserCheck } from "lucide-react";
+import { DashboardSkeleton } from "@/shared/components/PageSkeleton";
+import { EmptyState } from "@/shared/components/EmptyState";
+import { DollarSign, Users, CalendarDays, UserCheck, Calendar } from "lucide-react";
 import env from "@/config/env";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 const DashboardPage = () => {
   const { t } = useI18n();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(timer);
+  }, []);
+
   const todayAppointments = mockAppointments.filter((a) => a.date === "2025-03-18");
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <DashboardSkeleton />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-6">
         <h1 className="text-2xl font-heading font-bold">{t("dashboard.title")}</h1>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             title={t("dashboard.revenue")}
             value={`${env.defaultCurrency}67,000`}
@@ -59,12 +71,12 @@ const DashboardPage = () => {
               <CardTitle className="font-heading text-base">{t("dashboard.revenueChart")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-64">
+              <div className="h-48 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={mockRevenueData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                     <Tooltip
                       contentStyle={{
                         background: "hsl(var(--card))",
@@ -84,15 +96,19 @@ const DashboardPage = () => {
               <CardTitle className="font-heading text-base">{t("dashboard.upcomingAppointments")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {todayAppointments.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{a.patientName}</p>
-                    <p className="text-xs text-muted-foreground">{a.time} · {a.procedure}</p>
+              {todayAppointments.length > 0 ? (
+                todayAppointments.map((a) => (
+                  <div key={a.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{a.patientName}</p>
+                      <p className="text-xs text-muted-foreground">{a.time} · {a.procedure}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <EmptyState icon={Calendar} title={t("calendar.noAppointments")} />
+              )}
             </CardContent>
           </Card>
         </div>

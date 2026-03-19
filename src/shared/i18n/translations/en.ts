@@ -37,6 +37,10 @@ const en: Record<string, string> = {
   'patients.history': 'Visit History',
   'patients.notes': 'Notes',
   'patients.files': 'Files',
+  'patients.added': 'Patient added successfully',
+  'patients.deleted': 'Patient deleted successfully',
+  'patients.deleteConfirmTitle': 'Delete patient?',
+  'patients.deleteConfirmDesc': 'This action cannot be undone. All patient data will be permanently removed.',
 
   'dental.title': 'Dental Chart',
   'dental.healthy': 'Healthy',
@@ -49,6 +53,7 @@ const en: Record<string, string> = {
   'dental.procedures': 'Procedures',
   'dental.upper': 'Upper Jaw',
   'dental.lower': 'Lower Jaw',
+  'dental.statusChanged': 'Tooth status updated',
 
   'calendar.title': 'Appointments Calendar',
   'calendar.addAppointment': 'New Appointment',
@@ -58,6 +63,7 @@ const en: Record<string, string> = {
   'calendar.doctor': 'Doctor',
   'calendar.time': 'Time',
   'calendar.procedure': 'Procedure',
+  'calendar.noAppointments': 'No appointments for this period',
 
   'finances.title': 'Finances',
   'finances.invoices': 'Invoices',
@@ -99,6 +105,7 @@ const en: Record<string, string> = {
   'settings.assistant': 'Assistant',
   'settings.language': 'Language',
   'settings.save': 'Save',
+  'settings.saved': 'Settings saved',
 
   'common.save': 'Save',
   'common.cancel': 'Cancel',
@@ -109,6 +116,10 @@ const en: Record<string, string> = {
   'common.noData': 'No data',
   'common.loading': 'Loading...',
   'common.confirm': 'Confirm',
+  'common.error': 'Error',
+  'common.errorMessage': 'Something went wrong. Please try again.',
+  'common.retry': 'Try again',
+  'common.success': 'Success',
 };
 
 export default en;
