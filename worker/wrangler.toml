@@ -1,0 +1,26 @@
+name = "tooth-harmony-pro-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ── D1 Database ────────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding      = "DB"
+database_name = "tooth-harmony-pro-db"
+database_id  = "949efb7f-902f-4249-abb0-4b2c7dcbc59e"
+
+# ── Secrets (set via: npx wrangler secret put JWT_SECRET) ─────────────────────
+# JWT_SECRET  – use a long random string, e.g.:
+#               openssl rand -base64 48
+#
+# Do NOT put real secrets in this file. Use `wrangler secret put` or
+# Cloudflare Dashboard → Worker → Settings → Variables → Secret.
+
+# ── Local dev variables (.dev.vars file, never commit) ────────────────────────
+# [vars]
+# JWT_SECRET = "local-dev-only-secret"
+
+# ── Routes (optional, enable if you have a custom domain) ─────────────────────
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
