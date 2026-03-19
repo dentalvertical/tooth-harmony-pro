@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,17 +9,28 @@ import { mockAppointments } from "@/features/appointments/data";
 import { PatientTable } from "./PatientTable";
 import { PatientForm } from "./PatientForm";
 import { PatientProfile } from "./PatientProfile";
+import { PatientsSkeleton } from "@/shared/components/PageSkeleton";
+import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
+import { EmptyState } from "@/shared/components/EmptyState";
 import type { Patient } from "../types";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "@/hooks/use-toast";
 
 const PatientsPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [patients, setPatients] = useState<Patient[]>(mockPatients);
   const [showAdd, setShowAdd] = useState(false);
   const [showProfile, setShowProfile] = useState<Patient | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const filtered = patients.filter(
     (p) =>
@@ -37,15 +48,27 @@ const PatientsPage = () => {
     };
     setPatients([patient, ...patients]);
     setShowAdd(false);
+    toast({ title: t("common.success"), description: t("patients.added") });
   };
 
-  const handleDelete = (id: string) => {
-    setPatients(patients.filter((p) => p.id !== id));
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    setPatients(patients.filter((p) => p.id !== deleteTarget));
+    setDeleteTarget(null);
+    toast({ title: t("common.success"), description: t("patients.deleted") });
   };
 
   const patientHistory = showProfile
     ? mockAppointments.filter((a) => a.patientId === showProfile.id)
     : [];
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <PatientsSkeleton />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -54,7 +77,7 @@ const PatientsPage = () => {
           <h1 className="text-2xl font-heading font-bold">{t("patients.title")}</h1>
           <Button onClick={() => setShowAdd(true)} className="gradient-primary text-primary-foreground border-0 gap-2">
             <Plus className="w-4 h-4" />
-            {t("patients.add")}
+            <span className="hidden sm:inline">{t("patients.add")}</span>
           </Button>
         </div>
 
@@ -69,17 +92,30 @@ const PatientsPage = () => {
                 className="pl-10"
               />
             </div>
-            <PatientTable
-              patients={filtered}
-              onView={(p) => setShowProfile(p)}
-              onEdit={(p) => navigate(`/dental-chart?patient=${p.id}`)}
-              onDelete={handleDelete}
-            />
+            {filtered.length > 0 ? (
+              <PatientTable
+                patients={filtered}
+                onView={(p) => setShowProfile(p)}
+                onEdit={(p) => navigate(`/dental-chart?patient=${p.id}`)}
+                onDelete={(id) => setDeleteTarget(id)}
+              />
+            ) : (
+              <EmptyState icon={Users} title={t("common.noData")} />
+            )}
           </CardContent>
         </Card>
 
         <PatientForm open={showAdd} onOpenChange={setShowAdd} onSubmit={handleAdd} />
         <PatientProfile patient={showProfile} onClose={() => setShowProfile(null)} history={patientHistory} />
+        <ConfirmDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          title={t("patients.deleteConfirmTitle")}
+          description={t("patients.deleteConfirmDesc")}
+          confirmLabel={t("common.delete")}
+          variant="destructive"
+          onConfirm={handleDeleteConfirm}
+        />
       </div>
     </AppLayout>
   );

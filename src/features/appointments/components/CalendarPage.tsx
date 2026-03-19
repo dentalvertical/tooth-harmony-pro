@@ -1,15 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { mockAppointments } from "@/features/appointments/data";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarSkeleton } from "@/shared/components/PageSkeleton";
+import { EmptyState } from "@/shared/components/EmptyState";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays } from "lucide-react";
 
 const CalendarPage = () => {
   const { t } = useI18n();
+  const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState("2025-03-18");
   const [view, setView] = useState<"day" | "week">("day");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const hours = Array.from({ length: 10 }, (_, i) => i + 8);
   const dayAppointments = mockAppointments.filter((a) => a.date === currentDate);
@@ -34,6 +42,14 @@ const CalendarPage = () => {
     setCurrentDate(d.toISOString().split("T")[0]);
   };
 
+  if (loading) {
+    return (
+      <AppLayout>
+        <CalendarSkeleton />
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -41,17 +57,17 @@ const CalendarPage = () => {
           <h1 className="text-2xl font-heading font-bold">{t("calendar.title")}</h1>
           <Button className="gradient-primary text-primary-foreground border-0 gap-2">
             <Plus className="w-4 h-4" />
-            {t("calendar.addAppointment")}
+            <span className="hidden sm:inline">{t("calendar.addAppointment")}</span>
           </Button>
         </div>
 
         <Card className="shadow-card">
-          <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-4 flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <span className="font-heading font-semibold">{currentDate}</span>
+              <span className="font-heading font-semibold text-sm sm:text-base">{currentDate}</span>
               <Button variant="ghost" size="icon" onClick={() => navigate(1)}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
@@ -77,42 +93,46 @@ const CalendarPage = () => {
           </CardHeader>
           <CardContent>
             {view === "day" ? (
-              <div className="space-y-1">
-                {hours.map((h) => {
-                  const timeStr = `${String(h).padStart(2, "0")}:00`;
-                  const appts = dayAppointments.filter((a) => a.time.startsWith(String(h).padStart(2, "0")));
-                  return (
-                    <div key={h} className="flex gap-4 min-h-[56px] group">
-                      <div className="w-16 text-sm text-muted-foreground pt-2 text-right flex-shrink-0">
-                        {timeStr}
+              dayAppointments.length === 0 && hours.every(h => !mockAppointments.some(a => a.date === currentDate && a.time.startsWith(String(h).padStart(2, "0")))) ? (
+                <EmptyState icon={CalendarDays} title={t("calendar.noAppointments")} />
+              ) : (
+                <div className="space-y-1">
+                  {hours.map((h) => {
+                    const timeStr = `${String(h).padStart(2, "0")}:00`;
+                    const appts = dayAppointments.filter((a) => a.time.startsWith(String(h).padStart(2, "0")));
+                    return (
+                      <div key={h} className="flex gap-2 sm:gap-4 min-h-[56px] group">
+                        <div className="w-12 sm:w-16 text-xs sm:text-sm text-muted-foreground pt-2 text-right flex-shrink-0">
+                          {timeStr}
+                        </div>
+                        <div className="flex-1 border-t border-border/50 pt-2 group-hover:bg-muted/30 rounded px-2 transition-colors">
+                          {appts.map((a) => (
+                            <div key={a.id} className="p-2 sm:p-2.5 mb-1 rounded-lg gradient-primary text-primary-foreground text-sm">
+                              <p className="font-medium truncate">{a.patientName}</p>
+                              <p className="text-xs opacity-80 truncate">{a.time} · {a.procedure} · {a.doctorName}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex-1 border-t border-border/50 pt-2 group-hover:bg-muted/30 rounded px-2 transition-colors">
-                        {appts.map((a) => (
-                          <div key={a.id} className="p-2.5 mb-1 rounded-lg gradient-primary text-primary-foreground text-sm">
-                            <p className="font-medium">{a.patientName}</p>
-                            <p className="text-xs opacity-80">{a.time} · {a.procedure} · {a.doctorName}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
-              <div className="overflow-x-auto">
-                <div className="grid grid-cols-8 gap-px min-w-[700px]">
-                  <div className="w-16" />
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <div className="grid grid-cols-8 gap-px min-w-[600px]">
+                  <div className="w-12 sm:w-16" />
                   {weekDates.map((d, i) => (
-                    <div key={d} className={`text-center p-2 text-sm font-medium ${d === currentDate ? "text-primary" : "text-muted-foreground"}`}>
+                    <div key={d} className={`text-center p-1 sm:p-2 text-xs sm:text-sm font-medium ${d === currentDate ? "text-primary" : "text-muted-foreground"}`}>
                       <div>{dayNames[i]}</div>
-                      <div className={`text-lg ${d === currentDate ? "bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center mx-auto" : ""}`}>
+                      <div className={`text-base sm:text-lg ${d === currentDate ? "bg-primary text-primary-foreground w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mx-auto" : ""}`}>
                         {new Date(d).getDate()}
                       </div>
                     </div>
                   ))}
                   {hours.map((h) => (
-                    <>
-                      <div key={`label-${h}`} className="text-xs text-muted-foreground text-right pr-2 pt-2 w-16">
+                    <div key={`row-${h}`} className="contents">
+                      <div className="text-[10px] sm:text-xs text-muted-foreground text-right pr-1 sm:pr-2 pt-2 w-12 sm:w-16">
                         {`${String(h).padStart(2, "0")}:00`}
                       </div>
                       {weekDates.map((d) => {
@@ -120,16 +140,16 @@ const CalendarPage = () => {
                           (a) => a.date === d && a.time.startsWith(String(h).padStart(2, "0"))
                         );
                         return (
-                          <div key={`${d}-${h}`} className="border-t border-border/30 min-h-[48px] p-0.5">
+                          <div key={`${d}-${h}`} className="border-t border-border/30 min-h-[40px] sm:min-h-[48px] p-0.5">
                             {appts.map((a) => (
-                              <div key={a.id} className="text-xs p-1.5 rounded gradient-primary text-primary-foreground mb-0.5">
+                              <div key={a.id} className="text-[10px] sm:text-xs p-1 sm:p-1.5 rounded gradient-primary text-primary-foreground mb-0.5 truncate">
                                 {a.patientName.split(" ")[0]}
                               </div>
                             ))}
                           </div>
                         );
                       })}
-                    </>
+                    </div>
                   ))}
                 </div>
               </div>
