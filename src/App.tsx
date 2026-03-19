@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -6,14 +7,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/features/auth/store";
 
 // Feature pages
-import LoginPage from "@/features/auth/components/LoginPage";
-import DashboardPage from "@/features/dashboard/components/DashboardPage";
-import PatientsPage from "@/features/patients/components/PatientsPage";
-import DentalChartPage from "@/features/dental-chart/components/DentalChartPage";
-import CalendarPage from "@/features/appointments/components/CalendarPage";
-import FinancesPage from "@/features/finances/components/FinancesPage";
-import SettingsPage from "@/features/settings/components/SettingsPage";
-import NotFound from "./pages/NotFound";
+const LoginPage       = lazy(() => import("@/features/auth/components/LoginPage"));
+const DashboardPage   = lazy(() => import("@/features/dashboard/components/DashboardPage"));
+const PatientsPage    = lazy(() => import("@/features/patients/components/PatientsPage"));
+const DentalChartPage = lazy(() => import("@/features/dental-chart/components/DentalChartPage"));
+const CalendarPage    = lazy(() => import("@/features/appointments/components/CalendarPage"));
+const FinancesPage    = lazy(() => import("@/features/finances/components/FinancesPage"));
+const SettingsPage    = lazy(() => import("@/features/settings/components/SettingsPage"));
+const NotFound        = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+      <Suspense fallback={<div className="flex h-screen items-center justify-center">Завантаження...</div>}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -40,6 +42,7 @@ const App = () => (
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
