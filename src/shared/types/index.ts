@@ -2,7 +2,7 @@
  * Shared types used across multiple features
  */
 
-export type UserRole = 'admin' | 'doctor' | 'assistant' | 'staff';
+export type UserRole = 'superuser' | 'administrator' | 'doctor';
 
 export interface User {
   id?: string;

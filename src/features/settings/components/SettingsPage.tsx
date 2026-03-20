@@ -13,9 +13,9 @@ import { toast } from "@/hooks/use-toast";
 import { getUsers } from "@/shared/api/crm";
 
 const roleBadge: Record<string, string> = {
-  admin: "bg-destructive/10 text-destructive border-destructive/20",
+  superuser: "bg-destructive/10 text-destructive border-destructive/20",
+  administrator: "bg-info/10 text-info border-info/20",
   doctor: "bg-primary/10 text-primary border-primary/20",
-  assistant: "bg-info/10 text-info border-info/20",
 };
 
 const SettingsPage = () => {

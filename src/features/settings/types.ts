@@ -2,6 +2,6 @@ export interface StaffMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'doctor' | 'assistant';
+  role: 'superuser' | 'administrator' | 'doctor';
   phone: string;
 }

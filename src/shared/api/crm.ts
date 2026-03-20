@@ -37,7 +37,7 @@ interface ApiDoctor {
 interface ApiUser {
   id: string | number;
   email: string;
-  role: "admin" | "doctor" | "staff";
+  role: "superuser" | "administrator" | "doctor";
   full_name: string;
   active?: number | boolean;
 }
@@ -260,7 +260,7 @@ export async function getUsers(): Promise<StaffMember[]> {
       id: String(user.id),
       name: user.full_name,
       email: user.email,
-      role: user.role === "staff" ? "assistant" : user.role,
+      role: user.role,
       phone: "",
     }));
 }

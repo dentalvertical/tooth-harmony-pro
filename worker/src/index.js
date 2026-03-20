@@ -163,7 +163,7 @@ function getConfigValue(env, key) {
 
 async function ensureSchema(env) {
   const statements = [
-    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'staff', full_name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'administrator', full_name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, phone TEXT, email TEXT, date_of_birth TEXT, gender TEXT, address TEXT, notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS doctors (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, full_name TEXT NOT NULL, specialization TEXT, phone TEXT, email TEXT, color TEXT DEFAULT '#3B82F6', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL NOT NULL DEFAULT 0, duration_minutes INTEGER NOT NULL DEFAULT 30, category TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -198,11 +198,11 @@ async function ensureSuperUser(env) {
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
 
   if (existing) {
-    await env.DB.prepare("UPDATE users SET password_hash = ?, role = 'admin', full_name = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
+    await env.DB.prepare("UPDATE users SET password_hash = ?, role = 'superuser', full_name = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
       .bind(passwordHash, fullName.trim(), existing.id)
       .run();
   } else {
-    await env.DB.prepare("INSERT INTO users (email, password_hash, role, full_name, active) VALUES (?, ?, 'admin', ?, 1)")
+    await env.DB.prepare("INSERT INTO users (email, password_hash, role, full_name, active) VALUES (?, ?, 'superuser', ?, 1)")
       .bind(normalizedEmail, passwordHash, fullName.trim())
       .run();
   }
@@ -221,10 +221,15 @@ async function ensureSuperUser(env) {
   }
 }
 
+async function ensureRoleMigration(env) {
+  await env.DB.prepare("UPDATE users SET role = 'administrator' WHERE role IN ('admin', 'staff', 'assistant')").run();
+}
+
 async function ensureSystem(env) {
   if (!systemInitPromise) {
     systemInitPromise = (async () => {
       await ensureSchema(env);
+      await ensureRoleMigration(env);
       await ensureSuperUser(env);
     })().catch((error) => {
       systemInitPromise = null;
@@ -257,10 +262,18 @@ async function requireAuth(request, env) {
   return [user, null];
 }
 
+function isSuperuser(user) {
+  return user?.role === 'superuser';
+}
+
+function hasAnyRole(user, roles) {
+  return Boolean(user && (isSuperuser(user) || roles.includes(user.role)));
+}
+
 async function requireRole(request, env, ...roles) {
   const [user, authErr] = await requireAuth(request, env);
   if (authErr) return [null, authErr];
-  if (!roles.includes(user.role)) {
+  if (!hasAnyRole(user, roles)) {
     return [null, err(`Forbidden – required role: ${roles.join(' or ')}`, 403)];
   }
   return [user, null];
@@ -898,7 +911,7 @@ async function createUser(request, env) {
   const body = await request.json().catch(() => ({}));
   const missing = validateRequired(body, ['email', 'password', 'full_name', 'role']);
   if (missing) return err(missing);
-  if (!['admin', 'doctor', 'staff'].includes(body.role)) return err('Invalid role');
+  if (!['superuser', 'administrator', 'doctor'].includes(body.role)) return err('Invalid role');
   const exists = await env.DB
     .prepare('SELECT id FROM users WHERE email = ?').bind(body.email.toLowerCase()).first();
   if (exists) return err('Email already registered', 409);
@@ -919,7 +932,7 @@ async function updateUser(id, request, env) {
   const updates = [];
   const vals = [];
   if (body.full_name) { updates.push('full_name = ?'); vals.push(body.full_name.trim()); }
-  if (body.role && ['admin','doctor','staff'].includes(body.role)) {
+  if (body.role && ['superuser', 'administrator', 'doctor'].includes(body.role)) {
     updates.push('role = ?'); vals.push(body.role);
   }
   if (body.active !== undefined) { updates.push('active = ?'); vals.push(body.active ? 1 : 0); }
@@ -1089,7 +1102,7 @@ export default {
         if (method === 'GET')    return getPatient(pm[1], env);
         if (method === 'PUT')    return updatePatient(pm[1], request, env);
         if (method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return deletePatient(pm[1], env);
         }
       }
@@ -1098,14 +1111,14 @@ export default {
       if (p === '/doctors') {
         if (method === 'GET')  return listDoctors(request, env);
         if (method === 'POST') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return createDoctor(request, env);
         }
       }
       const dm = p.match(/^\/doctors\/(\d+)$/);
       if (dm) {
         if (method === 'PUT' || method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return method === 'PUT' ? updateDoctor(dm[1], request, env) : deleteDoctor(dm[1], env);
         }
       }
@@ -1114,14 +1127,14 @@ export default {
       if (p === '/services') {
         if (method === 'GET')  return listServices(request, env);
         if (method === 'POST') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return createService(request, env);
         }
       }
       const sm = p.match(/^\/services\/(\d+)$/);
       if (sm) {
         if (method === 'PUT' || method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return method === 'PUT' ? updateService(sm[1], request, env) : deleteService(sm[1], env);
         }
       }
@@ -1136,20 +1149,20 @@ export default {
         if (method === 'GET')    return getAppointment(am[1], env);
         if (method === 'PUT')    return updateAppointment(am[1], request, env);
         if (method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return deleteAppointment(am[1], env);
         }
       }
 
       // ── Treatments ───────────────────────────────────────────────────────
       if (p === '/treatments') {
-        if (!['doctor', 'admin'].includes(user.role)) return err('Forbidden', 403);
+        if (!hasAnyRole(user, ['doctor', 'administrator'])) return err('Forbidden', 403);
         if (method === 'GET')  return listTreatments(request, env);
         if (method === 'POST') return createTreatment(request, env);
       }
       const tm = p.match(/^\/treatments\/(\d+)$/);
       if (tm) {
-        if (!['doctor', 'admin'].includes(user.role)) return err('Forbidden', 403);
+        if (!hasAnyRole(user, ['doctor', 'administrator'])) return err('Forbidden', 403);
         if (method === 'GET') return getTreatment(tm[1], env);
         if (method === 'PUT') return updateTreatment(tm[1], request, env);
       }
@@ -1162,7 +1175,7 @@ export default {
       const paym = p.match(/^\/payments\/(\d+)$/);
       if (paym) {
         if (method === 'PUT') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return updatePayment(paym[1], request, env);
         }
       }
@@ -1178,13 +1191,13 @@ export default {
 
       // ── Users (admin) ────────────────────────────────────────────────────
       if (p === '/users') {
-        if (user.role !== 'admin') return err('Forbidden', 403);
+        if (!isSuperuser(user)) return err('Forbidden', 403);
         if (method === 'GET')  return listUsers(env);
         if (method === 'POST') return createUser(request, env);
       }
       const um = p.match(/^\/users\/(\d+)$/);
       if (um) {
-        if (user.role !== 'admin') return err('Forbidden', 403);
+        if (!isSuperuser(user)) return err('Forbidden', 403);
         if (method === 'PUT')    return updateUser(um[1], request, env);
         if (method === 'DELETE') return deleteUser(um[1], env);
       }
