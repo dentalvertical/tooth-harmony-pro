@@ -265,6 +265,30 @@ export async function getUsers(): Promise<StaffMember[]> {
     }));
 }
 
+interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+  role: StaffMember["role"];
+}
+
+export async function createUser(input: CreateUserInput): Promise<StaffMember> {
+  const data = await request<ApiUser>("POST", "/users", {
+    full_name: input.name,
+    email: input.email,
+    password: input.password,
+    role: input.role,
+  });
+
+  return {
+    id: String(data.id),
+    name: data.full_name,
+    email: data.email,
+    role: data.role,
+    phone: "",
+  };
+}
+
 export async function getDashboardStats() {
   return request<DashboardStatsResponse>("GET", "/dashboard/stats");
 }
