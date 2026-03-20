@@ -153,6 +153,85 @@ function paginated(items, total, page, limit) {
   });
 }
 
+let systemInitPromise = null;
+
+function getConfigValue(env, key) {
+  if (env && env[key]) return env[key];
+  if (typeof process !== 'undefined' && process?.env?.[key]) return process.env[key];
+  return undefined;
+}
+
+async function ensureSchema(env) {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'staff', full_name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, phone TEXT, email TEXT, date_of_birth TEXT, gender TEXT, address TEXT, notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS doctors (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, full_name TEXT NOT NULL, specialization TEXT, phone TEXT, email TEXT, color TEXT DEFAULT '#3B82F6', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL NOT NULL DEFAULT 0, duration_minutes INTEGER NOT NULL DEFAULT 30, category TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, service_id INTEGER, scheduled_at TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 30, status TEXT NOT NULL DEFAULT 'scheduled', notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS treatments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, appointment_id INTEGER, tooth_number INTEGER, diagnosis TEXT, procedure TEXT NOT NULL, notes TEXT, cost REAL NOT NULL DEFAULT 0, treated_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, treatment_id INTEGER, amount REAL NOT NULL DEFAULT 0, method TEXT NOT NULL DEFAULT 'cash', status TEXT NOT NULL DEFAULT 'paid', notes TEXT, paid_at TEXT NOT NULL DEFAULT (datetime('now')), created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE INDEX IF NOT EXISTS idx_patients_email ON patients(email)`,
+    `CREATE INDEX IF NOT EXISTS idx_doctors_user_id ON doctors(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON appointments(doctor_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_treatments_patient_id ON treatments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_treatments_doctor_id ON treatments(doctor_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_patient_id ON payments(patient_id)`,
+  ];
+
+  for (const sql of statements) {
+    await env.DB.prepare(sql).run();
+  }
+}
+
+async function ensureSuperUser(env) {
+  const email = getConfigValue(env, 'SUPERUSER_EMAIL');
+  const password = getConfigValue(env, 'SUPERUSER_PASSWORD');
+  const fullName = getConfigValue(env, 'SUPERUSER_NAME') || 'System Superuser';
+  if (!email || !password) return;
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const passwordHash = await hashPassword(password);
+  const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
+
+  if (existing) {
+    await env.DB.prepare("UPDATE users SET password_hash = ?, role = 'admin', full_name = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
+      .bind(passwordHash, fullName.trim(), existing.id)
+      .run();
+  } else {
+    await env.DB.prepare("INSERT INTO users (email, password_hash, role, full_name, active) VALUES (?, ?, 'admin', ?, 1)")
+      .bind(normalizedEmail, passwordHash, fullName.trim())
+      .run();
+  }
+
+  const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
+  const doctor = await env.DB.prepare('SELECT id FROM doctors WHERE user_id = ? OR email = ?').bind(user.id, normalizedEmail).first();
+
+  if (doctor) {
+    await env.DB.prepare("UPDATE doctors SET full_name = ?, email = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
+      .bind(fullName.trim(), normalizedEmail, doctor.id)
+      .run();
+  } else {
+    await env.DB.prepare("INSERT INTO doctors (user_id, full_name, specialization, email, color, active) VALUES (?, ?, 'Administrator', ?, '#DC2626', 1)")
+      .bind(user.id, fullName.trim(), normalizedEmail)
+      .run();
+  }
+}
+
+async function ensureSystem(env) {
+  if (!systemInitPromise) {
+    systemInitPromise = (async () => {
+      await ensureSchema(env);
+      await ensureSuperUser(env);
+    })().catch((error) => {
+      systemInitPromise = null;
+      throw error;
+    });
+  }
+
+  return systemInitPromise;
+}
+
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
 async function authenticate(request, env) {
@@ -886,6 +965,7 @@ export default {
     const p = path.replace(/^\/api/, '').replace(/\/$/, '') || '/';
 
     try {
+      await ensureSystem(env);
       // ── Public routes ──────────────────────────────────────────────────────
       if (p === '/auth/login'    && method === 'POST') return handleLogin(request, env);
       if (p === '/auth/logout'   && method === 'POST') return ok({ message: 'Logged out' });

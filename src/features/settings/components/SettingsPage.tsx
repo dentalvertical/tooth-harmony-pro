@@ -7,10 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { mockStaff } from "@/features/settings/data";
 import type { StaffMember } from "@/features/settings/types";
 import { Plus, User, Building2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { getUsers } from "@/shared/api/crm";
 
 const roleBadge: Record<string, string> = {
   admin: "bg-destructive/10 text-destructive border-destructive/20",
@@ -21,11 +21,12 @@ const roleBadge: Record<string, string> = {
 const SettingsPage = () => {
   const { t, lang, setLang } = useI18n();
   const [loading, setLoading] = useState(true);
-  const [staff] = useState<StaffMember[]>(mockStaff);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 400);
-    return () => clearTimeout(timer);
+    getUsers()
+      .then(setStaff)
+      .finally(() => setLoading(false));
   }, []);
 
   const handleSave = () => {

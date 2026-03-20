@@ -4,8 +4,6 @@ import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { mockPatients } from "@/features/patients/data";
-import { mockAppointments } from "@/features/appointments/data";
 import { PatientTable } from "./PatientTable";
 import { PatientForm } from "./PatientForm";
 import { PatientProfile } from "./PatientProfile";
@@ -16,20 +14,27 @@ import type { Patient } from "../types";
 import { Plus, Search, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { createPatient, deletePatient as removePatient, getAppointments, getPatients } from "@/shared/api/crm";
+import type { Appointment } from "@/features/appointments/types";
 
 const PatientsPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [patients, setPatients] = useState<Patient[]>(mockPatients);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showProfile, setShowProfile] = useState<Patient | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    Promise.all([getPatients(), getAppointments()])
+      .then(([patientList, appointmentList]) => {
+        setPatients(patientList);
+        setAppointments(appointmentList);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = patients.filter(
@@ -39,27 +44,23 @@ const PatientsPage = () => {
       p.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAdd = (data: { fullName: string; phone: string; email: string; notes: string }) => {
-    const patient: Patient = {
-      id: String(Date.now()),
-      ...data,
-      lastVisit: "-",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setPatients([patient, ...patients]);
+  const handleAdd = async (data: { fullName: string; phone: string; email: string; notes: string }) => {
+    const patient = await createPatient(data);
+    setPatients((prev) => [patient, ...prev]);
     setShowAdd(false);
     toast({ title: t("common.success"), description: t("patients.added") });
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
+    await removePatient(deleteTarget);
     setPatients(patients.filter((p) => p.id !== deleteTarget));
     setDeleteTarget(null);
     toast({ title: t("common.success"), description: t("patients.deleted") });
   };
 
   const patientHistory = showProfile
-    ? mockAppointments.filter((a) => a.patientId === showProfile.id)
+    ? appointments.filter((a) => a.patientId === showProfile.id)
     : [];
 
   if (loading) {

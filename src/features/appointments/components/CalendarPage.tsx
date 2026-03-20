@@ -3,24 +3,27 @@ import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { mockAppointments } from "@/features/appointments/data";
 import { CalendarSkeleton } from "@/shared/components/PageSkeleton";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ChevronLeft, ChevronRight, Plus, CalendarDays } from "lucide-react";
+import type { Appointment } from "../types";
+import { getAppointments } from "@/shared/api/crm";
 
 const CalendarPage = () => {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState("2025-03-18");
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0]);
   const [view, setView] = useState<"day" | "week">("day");
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    getAppointments()
+      .then(setAppointments)
+      .finally(() => setLoading(false));
   }, []);
 
   const hours = Array.from({ length: 10 }, (_, i) => i + 8);
-  const dayAppointments = mockAppointments.filter((a) => a.date === currentDate);
+  const dayAppointments = appointments.filter((a) => a.date === currentDate);
 
   const getWeekDates = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -93,7 +96,7 @@ const CalendarPage = () => {
           </CardHeader>
           <CardContent>
             {view === "day" ? (
-              dayAppointments.length === 0 && hours.every(h => !mockAppointments.some(a => a.date === currentDate && a.time.startsWith(String(h).padStart(2, "0")))) ? (
+              dayAppointments.length === 0 && hours.every(h => !appointments.some(a => a.date === currentDate && a.time.startsWith(String(h).padStart(2, "0")))) ? (
                 <EmptyState icon={CalendarDays} title={t("calendar.noAppointments")} />
               ) : (
                 <div className="space-y-1">
@@ -136,7 +139,7 @@ const CalendarPage = () => {
                         {`${String(h).padStart(2, "0")}:00`}
                       </div>
                       {weekDates.map((d) => {
-                        const appts = mockAppointments.filter(
+                        const appts = appointments.filter(
                           (a) => a.date === d && a.time.startsWith(String(h).padStart(2, "0"))
                         );
                         return (
