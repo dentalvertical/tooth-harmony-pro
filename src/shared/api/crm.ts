@@ -289,6 +289,35 @@ export async function createUser(input: CreateUserInput): Promise<StaffMember> {
   };
 }
 
+interface UpdateUserInput {
+  id: string;
+  name?: string;
+  password?: string;
+  role?: StaffMember["role"];
+  active?: boolean;
+}
+
+export async function updateUser(input: UpdateUserInput): Promise<StaffMember> {
+  const data = await request<ApiUser>("PUT", `/users/${input.id}`, {
+    full_name: input.name,
+    password: input.password,
+    role: input.role,
+    active: input.active,
+  });
+
+  return {
+    id: String(data.id),
+    name: data.full_name,
+    email: data.email,
+    role: data.role,
+    phone: "",
+  };
+}
+
+export async function deactivateUser(userId: string) {
+  await request("DELETE", `/users/${userId}`);
+}
+
 export async function getDashboardStats() {
   return request<DashboardStatsResponse>("GET", "/dashboard/stats");
 }
