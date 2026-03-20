@@ -10,8 +10,6 @@ import type {
   ToothRecord,
 } from "./types";
 
-const FILES_STORAGE_KEY = "dental-chart-files-v1";
-
 interface ApiEnvelope<T> {
   success: boolean;
   data: T;
@@ -71,10 +69,19 @@ interface ApiPayment {
   status?: "paid" | "pending" | "partial" | "overdue" | string | null;
 }
 
-interface LocalFilesMap {
-  [patientId: string]: {
-    [toothNumber: string]: MedicalFile[];
-  };
+interface ApiMedicalFile {
+  id: string | number;
+  patient_id: string | number;
+  tooth_number?: number | null;
+  treatment_id?: string | number | null;
+  doctor_id?: string | number | null;
+  doctor_name?: string | null;
+  category: MedicalFileCategory;
+  file_name: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  note?: string | null;
+  created_at: string;
 }
 
 export const UPPER_TEETH = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
@@ -146,24 +153,6 @@ async function postApi<T>(path: string, body: unknown) {
   return payload.data;
 }
 
-function loadLocalFiles(): LocalFilesMap {
-  if (typeof window === "undefined") return {};
-
-  const raw = window.localStorage.getItem(FILES_STORAGE_KEY);
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw) as LocalFilesMap;
-  } catch {
-    return {};
-  }
-}
-
-function persistLocalFiles(files: LocalFilesMap) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(files));
-}
-
 function normalizeDate(dateTime?: string | null) {
   return dateTime ? dateTime.slice(0, 10) : "";
 }
@@ -184,13 +173,27 @@ function normalizePatient(patient: ApiPatient) {
   };
 }
 
+function mapMedicalFile(file: ApiMedicalFile): MedicalFile {
+  return {
+    id: String(file.id),
+    name: file.file_name,
+    category: file.category,
+    note: file.note || "",
+    toothNumber: file.tooth_number ? Number(file.tooth_number) : undefined,
+    mimeType: file.mime_type || undefined,
+    sizeBytes: file.size_bytes ? Number(file.size_bytes) : undefined,
+    doctorName: file.doctor_name || undefined,
+    addedAt: normalizeDate(file.created_at) || file.created_at,
+  };
+}
+
 function buildEntriesForPatient(
   patientId: string,
   treatments: ApiTreatment[],
-  localFiles: LocalFilesMap,
+  files: ApiMedicalFile[],
 ): ToothRecord[] {
   const teeth = Array.from({ length: 32 }, (_, index) => createEmptyToothRecord(index + 1));
-  const patientFiles = localFiles[patientId] || {};
+  const patientFiles = files.filter((file) => String(file.patient_id) === patientId);
 
   treatments
     .filter((treatment) => Number(treatment.tooth_number) >= 1 && Number(treatment.tooth_number) <= 32)
@@ -226,7 +229,9 @@ function buildEntriesForPatient(
     });
 
   teeth.forEach((tooth) => {
-    tooth.files = patientFiles[String(tooth.toothNumber)] || [];
+    tooth.files = patientFiles
+      .filter((file) => Number(file.tooth_number) === tooth.toothNumber)
+      .map(mapMedicalFile);
   });
 
   return teeth;
@@ -309,25 +314,24 @@ function buildInvoices(
 }
 
 export async function loadPatientCharts(): Promise<PatientChartRecord[]> {
-  const [patients, doctors, appointments, treatments, payments] = await Promise.all([
+  const [patients, doctors, appointments, treatments, payments, files] = await Promise.all([
     fetchApi<ApiPatient[]>("/patients", { limit: "100" }),
     fetchApi<ApiDoctor[]>("/doctors", { active: "true" }),
     fetchApi<ApiAppointment[]>("/appointments", { limit: "200" }),
     fetchApi<ApiTreatment[]>("/treatments", { limit: "200" }),
     fetchApi<ApiPayment[]>("/payments", { limit: "200" }),
+    fetchApi<ApiMedicalFile[]>("/files", { limit: "1000" }),
   ]);
-
-  const localFiles = loadLocalFiles();
 
   return patients.map((patient) => {
     const patientId = String(patient.id);
     const patientAppointments = appointments.filter((appointment) => String(appointment.patient_id) === patientId);
     const patientTreatments = treatments.filter((treatment) => String(treatment.patient_id) === patientId);
     const patientPayments = payments.filter((payment) => String(payment.patient_id) === patientId);
-    const teeth = buildEntriesForPatient(patientId, patientTreatments, localFiles);
+    const patientFiles = files.filter((file) => String(file.patient_id) === patientId);
+    const teeth = buildEntriesForPatient(patientId, patientTreatments, patientFiles);
     const visits = buildVisits(patientAppointments);
     const invoices = buildInvoices(patientId, patient.full_name, patientTreatments, patientPayments);
-    const files = Object.values(localFiles[patientId] || {}).flat();
     const doctorNames = Array.from(
       new Set([
         ...doctors.map((doctor) => doctor.full_name),
@@ -348,7 +352,7 @@ export async function loadPatientCharts(): Promise<PatientChartRecord[]> {
       teeth,
       visits,
       invoices,
-      files,
+      files: patientFiles.map(mapMedicalFile),
       updatedAt: latestTreatment || visits[0]?.date || "",
     };
   });
@@ -358,11 +362,24 @@ export function persistPatientCharts(_charts: PatientChartRecord[]) {
   return;
 }
 
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+
+  for (let i = 0; i < bytes.byteLength; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+
+  return btoa(binary);
+}
+
 export async function saveToothRecord(
   patientId: string,
   values: ToothFormValues,
   toothNumber: number,
   doctorNameOptions: string[],
+  attachedFile?: File | null,
 ) {
   const doctors = await fetchApi<ApiDoctor[]>("/doctors", { active: "true" });
   const matchedDoctor =
@@ -387,26 +404,40 @@ export async function saveToothRecord(
       : new Date().toISOString(),
   });
 
-  if (values.fileName.trim()) {
-    const files = loadLocalFiles();
-    const patientFiles = files[patientId] || {};
-    const toothFiles = patientFiles[String(toothNumber)] || [];
-
-    patientFiles[String(toothNumber)] = [
-      {
-        id: `file-${Date.now()}`,
-        name: values.fileName.trim(),
-        category: values.fileCategory,
-        note: values.fileNote.trim(),
-        toothNumber,
-        addedAt: values.visitDate || new Date().toISOString().slice(0, 10),
-      },
-      ...toothFiles,
-    ];
-
-    files[patientId] = patientFiles;
-    persistLocalFiles(files);
+  if (attachedFile) {
+    await postApi("/files", {
+      patient_id: Number(patientId),
+      doctor_id: Number(matchedDoctor.id),
+      tooth_number: toothNumber,
+      category: values.fileCategory,
+      file_name: values.fileName.trim() || attachedFile.name,
+      mime_type: attachedFile.type || "application/octet-stream",
+      size_bytes: attachedFile.size,
+      note: values.fileNote.trim() || null,
+      content_base64: await fileToBase64(attachedFile),
+    });
   }
+}
+
+export async function downloadMedicalFile(fileId: string, fileName: string) {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("auth_token") : null;
+  const response = await fetch(`${env.apiBaseUrl}/files/${fileId}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to download ${fileName}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = window.document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  window.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export function formatDate(date: string, locale: "uk" | "en") {

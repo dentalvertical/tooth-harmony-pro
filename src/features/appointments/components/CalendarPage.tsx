@@ -1,29 +1,67 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { CalendarSkeleton } from "@/shared/components/PageSkeleton";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { ChevronLeft, ChevronRight, Plus, CalendarDays } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { Appointment } from "../types";
-import { getAppointments } from "@/shared/api/crm";
+import { createAppointment, getAppointments, getDoctors, getPatients } from "@/shared/api/crm";
+
+interface DoctorOption {
+  id: string;
+  name: string;
+}
+
+interface PatientOption {
+  id: string;
+  fullName: string;
+}
+
+const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 
 const CalendarPage = () => {
   const { t } = useI18n();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0]);
   const [view, setView] = useState<"day" | "week">("day");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<PatientOption[]>([]);
+  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    patientId: "",
+    doctorId: "",
+    date: new Date().toISOString().split("T")[0],
+    time: "09:00",
+    notes: "",
+  });
 
   useEffect(() => {
-    getAppointments()
-      .then(setAppointments)
+    Promise.all([getAppointments(), getPatients(), getDoctors()])
+      .then(([appointmentsData, patientsData, doctorsData]) => {
+        setAppointments(appointmentsData);
+        setPatients(
+          patientsData.map((patient) => ({
+            id: patient.id,
+            fullName: patient.fullName,
+          })),
+        );
+        setDoctors(doctorsData);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const hours = Array.from({ length: 10 }, (_, i) => i + 8);
-  const dayAppointments = appointments.filter((a) => a.date === currentDate);
+  const dayAppointments = appointments.filter((appointment) => appointment.date === currentDate);
 
   const getWeekDates = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -37,12 +75,70 @@ const CalendarPage = () => {
   };
 
   const weekDates = getWeekDates(currentDate);
-  const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 
   const navigate = (dir: number) => {
     const d = new Date(currentDate);
     d.setDate(d.getDate() + (view === "day" ? dir : dir * 7));
     setCurrentDate(d.toISOString().split("T")[0]);
+  };
+
+  const resetForm = () => {
+    setForm({
+      patientId: patients[0]?.id || "",
+      doctorId: doctors[0]?.id || "",
+      date: currentDate,
+      time: "09:00",
+      notes: "",
+    });
+  };
+
+  useEffect(() => {
+    if (!form.patientId && patients[0]) {
+      setForm((prev) => ({ ...prev, patientId: patients[0].id }));
+    }
+  }, [patients, form.patientId]);
+
+  useEffect(() => {
+    if (!form.doctorId && doctors[0]) {
+      setForm((prev) => ({ ...prev, doctorId: doctors[0].id }));
+    }
+  }, [doctors, form.doctorId]);
+
+  const handleCreateAppointment = async () => {
+    if (!form.patientId || !form.doctorId || !form.date || !form.time) {
+      toast({
+        title: t("calendar.title"),
+        description: "Заповніть пацієнта, лікаря, дату і час.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const created = await createAppointment({
+        patientId: form.patientId,
+        doctorId: form.doctorId,
+        date: form.date,
+        time: form.time,
+        notes: form.notes,
+      });
+      setAppointments((prev) => [...prev, created].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)));
+      setShowForm(false);
+      resetForm();
+      toast({
+        title: t("calendar.title"),
+        description: "Візит створено.",
+      });
+    } catch (error) {
+      toast({
+        title: t("calendar.title"),
+        description: error instanceof Error ? error.message : "Не вдалося створити візит.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -58,11 +154,94 @@ const CalendarPage = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <h1 className="text-2xl font-heading font-bold">{t("calendar.title")}</h1>
-          <Button className="gradient-primary text-primary-foreground border-0 gap-2">
+          <Button
+            className="gradient-primary text-primary-foreground border-0 gap-2"
+            onClick={() => {
+              setShowForm((prev) => !prev);
+              resetForm();
+            }}
+          >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("calendar.addAppointment")}</span>
           </Button>
         </div>
+
+        {showForm ? (
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle className="font-heading text-base">{t("calendar.addAppointment")}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className="space-y-2">
+                <Label>Пацієнт</Label>
+                <Select value={form.patientId} onValueChange={(value) => setForm((prev) => ({ ...prev, patientId: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть пацієнта" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {patients.map((patient) => (
+                      <SelectItem key={patient.id} value={patient.id}>
+                        {patient.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Лікар</Label>
+                <Select value={form.doctorId} onValueChange={(value) => setForm((prev) => ({ ...prev, doctorId: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть лікаря" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        {doctor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Дата</Label>
+                <Input
+                  type="date"
+                  value={form.date}
+                  onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Час</Label>
+                <Input
+                  type="time"
+                  value={form.time}
+                  onChange={(event) => setForm((prev) => ({ ...prev, time: event.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2 xl:col-span-1">
+                <Label>Нотатка / послуга</Label>
+                <Textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+                />
+              </div>
+
+              <div className="md:col-span-2 xl:col-span-5 flex gap-3">
+                <Button onClick={() => void handleCreateAppointment()} disabled={submitting}>
+                  {submitting ? "Збереження..." : "Створити візит"}
+                </Button>
+                <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
+                  Скасувати
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card className="shadow-card">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-4 flex-wrap gap-3">
@@ -96,7 +275,7 @@ const CalendarPage = () => {
           </CardHeader>
           <CardContent>
             {view === "day" ? (
-              dayAppointments.length === 0 && hours.every(h => !appointments.some(a => a.date === currentDate && a.time.startsWith(String(h).padStart(2, "0")))) ? (
+              dayAppointments.length === 0 && hours.every((h) => !appointments.some((a) => a.date === currentDate && a.time.startsWith(String(h).padStart(2, "0")))) ? (
                 <EmptyState icon={CalendarDays} title={t("calendar.noAppointments")} />
               ) : (
                 <div className="space-y-1">
@@ -140,7 +319,7 @@ const CalendarPage = () => {
                       </div>
                       {weekDates.map((d) => {
                         const appts = appointments.filter(
-                          (a) => a.date === d && a.time.startsWith(String(h).padStart(2, "0"))
+                          (a) => a.date === d && a.time.startsWith(String(h).padStart(2, "0")),
                         );
                         return (
                           <div key={`${d}-${h}`} className="border-t border-border/30 min-h-[40px] sm:min-h-[48px] p-0.5">

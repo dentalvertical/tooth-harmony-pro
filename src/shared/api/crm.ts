@@ -209,6 +209,28 @@ export async function getAppointments(params?: Record<string, string>): Promise<
   return data.map(mapAppointment);
 }
 
+interface CreateAppointmentInput {
+  patientId: string;
+  doctorId: string;
+  date: string;
+  time: string;
+  notes?: string;
+  durationMinutes?: number;
+}
+
+export async function createAppointment(input: CreateAppointmentInput): Promise<Appointment> {
+  const scheduledAt = `${input.date}T${input.time}:00.000Z`;
+  const data = await request<ApiAppointment>("POST", "/appointments", {
+    patient_id: Number(input.patientId),
+    doctor_id: Number(input.doctorId),
+    scheduled_at: scheduledAt,
+    duration_minutes: input.durationMinutes || 30,
+    notes: input.notes || null,
+  });
+
+  return mapAppointment(data);
+}
+
 export async function getDoctors() {
   const data = await request<ApiDoctor[]>("GET", "/doctors", undefined, { active: "true" });
   return data.map((doctor) => ({
@@ -301,4 +323,3 @@ export async function getFinanceInvoices(): Promise<Invoice[]> {
       } satisfies Invoice;
     });
 }
-

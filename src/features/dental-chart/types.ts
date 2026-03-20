@@ -10,6 +10,9 @@ export interface MedicalFile {
   category: MedicalFileCategory;
   note: string;
   toothNumber?: number;
+  mimeType?: string;
+  sizeBytes?: number;
+  doctorName?: string;
   addedAt: string;
 }
 

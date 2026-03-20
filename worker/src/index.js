@@ -170,6 +170,7 @@ async function ensureSchema(env) {
     `CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, service_id INTEGER, scheduled_at TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 30, status TEXT NOT NULL DEFAULT 'scheduled', notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS treatments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, appointment_id INTEGER, tooth_number INTEGER, diagnosis TEXT, procedure TEXT NOT NULL, notes TEXT, cost REAL NOT NULL DEFAULT 0, treated_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, treatment_id INTEGER, amount REAL NOT NULL DEFAULT 0, method TEXT NOT NULL DEFAULT 'cash', status TEXT NOT NULL DEFAULT 'paid', notes TEXT, paid_at TEXT NOT NULL DEFAULT (datetime('now')), created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS medical_files (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, tooth_number INTEGER, treatment_id INTEGER, doctor_id INTEGER, category TEXT NOT NULL DEFAULT 'document', file_name TEXT NOT NULL, mime_type TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, note TEXT, content_base64 TEXT NOT NULL, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     `CREATE INDEX IF NOT EXISTS idx_patients_email ON patients(email)`,
     `CREATE INDEX IF NOT EXISTS idx_doctors_user_id ON doctors(user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)`,
@@ -177,6 +178,8 @@ async function ensureSchema(env) {
     `CREATE INDEX IF NOT EXISTS idx_treatments_patient_id ON treatments(patient_id)`,
     `CREATE INDEX IF NOT EXISTS idx_treatments_doctor_id ON treatments(doctor_id)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_patient_id ON payments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_medical_files_patient_id ON medical_files(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_medical_files_tooth_number ON medical_files(tooth_number)`,
   ];
 
   for (const sql of statements) {
@@ -781,6 +784,106 @@ async function updatePayment(id, request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MEDICAL FILES
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function listMedicalFiles(request, env) {
+  const url = new URL(request.url);
+  const patientId = url.searchParams.get('patient_id');
+  const toothNumber = url.searchParams.get('tooth_number');
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+  const limit = Math.min(500, parseInt(url.searchParams.get('limit') || '200'));
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+  const params = [];
+  if (patientId) { conditions.push('mf.patient_id = ?'); params.push(patientId); }
+  if (toothNumber) { conditions.push('mf.tooth_number = ?'); params.push(toothNumber); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [rows, countRow] = await Promise.all([
+    env.DB.prepare(`
+      SELECT mf.id, mf.patient_id, mf.tooth_number, mf.treatment_id, mf.doctor_id, mf.category,
+        mf.file_name, mf.mime_type, mf.size_bytes, mf.note, mf.created_at, mf.updated_at,
+        p.full_name AS patient_name, d.full_name AS doctor_name
+      FROM medical_files mf
+      LEFT JOIN patients p ON mf.patient_id = p.id
+      LEFT JOIN doctors d ON mf.doctor_id = d.id
+      ${where} ORDER BY mf.created_at DESC LIMIT ? OFFSET ?
+    `).bind(...params, limit, offset).all(),
+    env.DB.prepare(`SELECT COUNT(*) as cnt FROM medical_files mf ${where}`)
+      .bind(...params).first(),
+  ]);
+
+  return paginated(rows.results, countRow.cnt, page, limit);
+}
+
+async function createMedicalFile(request, env, user) {
+  const body = await request.json().catch(() => ({}));
+  const missing = validateRequired(body, ['patient_id', 'file_name', 'content_base64']);
+  if (missing) return err(missing);
+
+  const r = await env.DB.prepare(`
+    INSERT INTO medical_files
+      (patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type, size_bytes, note, content_base64, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    body.patient_id,
+    body.tooth_number || null,
+    body.treatment_id || null,
+    body.doctor_id || null,
+    body.category || 'document',
+    body.file_name.trim(),
+    body.mime_type || 'application/octet-stream',
+    parseInt(body.size_bytes) || 0,
+    body.note || null,
+    body.content_base64,
+    user.id,
+  ).run();
+
+  const row = await env.DB.prepare(`
+    SELECT id, patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type,
+      size_bytes, note, created_at, updated_at
+    FROM medical_files
+    WHERE id = ?
+  `).bind(r.meta.last_row_id).first();
+
+  return ok(row);
+}
+
+async function getMedicalFile(id, env) {
+  const row = await env.DB.prepare(`
+    SELECT id, patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type,
+      size_bytes, note, created_at, updated_at
+    FROM medical_files
+    WHERE id = ?
+  `).bind(id).first();
+
+  if (!row) return err('Medical file not found', 404);
+  return ok(row);
+}
+
+async function downloadMedicalFile(id, env) {
+  const row = await env.DB.prepare(`
+    SELECT file_name, mime_type, content_base64
+    FROM medical_files
+    WHERE id = ?
+  `).bind(id).first();
+
+  if (!row) return err('Medical file not found', 404);
+
+  const binary = Uint8Array.from(atob(row.content_base64), (char) => char.charCodeAt(0));
+  return new Response(binary, {
+    status: 200,
+    headers: {
+      'Content-Type': row.mime_type || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${row.file_name}"`,
+      ...CORS,
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // USERS (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1063,6 +1166,15 @@ export default {
           return updatePayment(paym[1], request, env);
         }
       }
+
+      if (p === '/files') {
+        if (method === 'GET')  return listMedicalFiles(request, env);
+        if (method === 'POST') return createMedicalFile(request, env, user);
+      }
+      const fileMetaMatch = p.match(/^\/files\/(\d+)$/);
+      if (fileMetaMatch && method === 'GET') return getMedicalFile(fileMetaMatch[1], env);
+      const fileDownloadMatch = p.match(/^\/files\/(\d+)\/download$/);
+      if (fileDownloadMatch && method === 'GET') return downloadMedicalFile(fileDownloadMatch[1], env);
 
       // ── Users (admin) ────────────────────────────────────────────────────
       if (p === '/users') {

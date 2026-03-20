@@ -171,7 +171,7 @@ const DentalChartPage = () => {
     navigate(`/dental-chart?patient=${patientId}`, { replace: true });
   };
 
-  const handleSaveTooth = async (values: ToothFormValues) => {
+  const handleSaveTooth = async (values: ToothFormValues, file: File | null) => {
     if (!patientChart || !selectedTooth) return;
 
     try {
@@ -180,6 +180,7 @@ const DentalChartPage = () => {
         values,
         selectedTooth.toothNumber,
         patientChart.attendingDoctors,
+        file,
       );
       const refreshed = await loadPatientCharts();
       setCharts(refreshed);
