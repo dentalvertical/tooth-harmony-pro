@@ -354,12 +354,12 @@ const DentalChartPage = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-10 p-6">
-                <div className="rounded-[32px] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-4 md:p-6">
-                  <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                <div className="rounded-[32px] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-3 md:p-5">
+                  <div className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     {text.upper}
                   </div>
-                  <div className="flex justify-center overflow-x-auto">
-                    <div className="flex min-w-max gap-1">
+                  <div className="flex justify-center items-end overflow-x-auto py-[5px]">
+                    <div className="flex min-w-max flex-nowrap items-end gap-0">
                       {UPPER_TEETH.map((number) => {
                         const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
                         if (!tooth) return null;
@@ -371,6 +371,7 @@ const DentalChartPage = () => {
                             isUpper
                             record={tooth}
                             selected={selectedTooth?.toothNumber === number}
+                            alignBottom
                             onClick={() => setSelectedToothNumber(number)}
                           />
                         );
@@ -379,12 +380,9 @@ const DentalChartPage = () => {
                   </div>
                 </div>
 
-                <div className="rounded-[32px] bg-[radial-gradient(circle_at_bottom,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-4 md:p-6">
-                  <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    {text.lower}
-                  </div>
-                  <div className="flex justify-center overflow-x-auto">
-                    <div className="flex min-w-max gap-1">
+                <div className="rounded-[32px] bg-[radial-gradient(circle_at_bottom,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-3 md:p-5">
+                  <div className="flex justify-center items-start overflow-x-auto py-[5px]">
+                    <div className="flex min-w-max flex-nowrap items-start gap-0">
                       {LOWER_TEETH.map((number) => {
                         const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
                         if (!tooth) return null;
@@ -396,11 +394,15 @@ const DentalChartPage = () => {
                             isUpper={false}
                             record={tooth}
                             selected={selectedTooth?.toothNumber === number}
+                            alignBottom={false}
                             onClick={() => setSelectedToothNumber(number)}
                           />
                         );
                       })}
                     </div>
+                  </div>
+                  <div className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                    {text.lower}
                   </div>
                 </div>
               </CardContent>
