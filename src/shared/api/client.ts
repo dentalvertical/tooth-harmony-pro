@@ -24,8 +24,8 @@ class ApiError extends Error {
 }
 
 function getAuthToken(): string | null {
-  // Will be replaced with real auth token retrieval
-  return null;
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem('auth_token');
 }
 
 function buildUrl(path: string, params?: Record<string, string>): string {

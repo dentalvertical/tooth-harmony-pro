@@ -16,9 +16,9 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { t, lang, setLang } = useI18n();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(email, password)) {
+    if (await login(email, password)) {
       navigate("/dashboard");
     }
   };
