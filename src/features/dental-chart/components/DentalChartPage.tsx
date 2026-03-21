@@ -354,12 +354,12 @@ const DentalChartPage = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-10 p-6">
-                <div className="rounded-[32px] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-3 md:p-5">
-                  <div className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                <div className="rounded-[32px] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.98),_rgba(244,236,232,0.92)_55%,_rgba(248,244,240,0.86))] px-4 py-6 md:px-8 md:py-8">
+                  <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     {text.upper}
                   </div>
-                  <div className="flex justify-center items-end overflow-x-auto py-[5px]">
-                    <div className="flex min-w-max flex-nowrap items-end gap-0">
+                  <div className="flex justify-center items-end overflow-x-auto py-2">
+                    <div className="flex min-w-max flex-nowrap items-end gap-[1px] md:gap-[2px]">
                       {UPPER_TEETH.map((number) => {
                         const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
                         if (!tooth) return null;
@@ -380,9 +380,9 @@ const DentalChartPage = () => {
                   </div>
                 </div>
 
-                <div className="rounded-[32px] bg-[radial-gradient(circle_at_bottom,_rgba(255,255,255,0.95),_rgba(244,236,232,0.9)_55%,_rgba(248,244,240,0.8))] p-3 md:p-5">
-                  <div className="flex justify-center items-start overflow-x-auto py-[5px]">
-                    <div className="flex min-w-max flex-nowrap items-start gap-0">
+                <div className="rounded-[32px] bg-[radial-gradient(circle_at_bottom,_rgba(255,255,255,0.98),_rgba(244,236,232,0.92)_55%,_rgba(248,244,240,0.86))] px-4 py-6 md:px-8 md:py-8">
+                  <div className="flex justify-center items-start overflow-x-auto py-2">
+                    <div className="flex min-w-max flex-nowrap items-start gap-[1px] md:gap-[2px]">
                       {LOWER_TEETH.map((number) => {
                         const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
                         if (!tooth) return null;
@@ -401,7 +401,7 @@ const DentalChartPage = () => {
                       })}
                     </div>
                   </div>
-                  <div className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  <div className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     {text.lower}
                   </div>
                 </div>
