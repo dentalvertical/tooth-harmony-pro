@@ -8,11 +8,15 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "npm run build && wrangler dev",
+    "preview": "npm run build && wrangler dev -c worker/wrangler.toml",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npm run build && wrangler deploy",
-    "deploy:worker": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-worker.ps1"
+    "deploy": "npm run build && wrangler deploy -c worker/wrangler.toml",
+    "deploy:worker": "wrangler deploy -c worker/wrangler.toml",
+    "dev:worker": "wrangler dev -c worker/wrangler.toml",
+    "db:migrate:local": "wrangler d1 migrations apply tooth-harmony-db --local -c worker/wrangler.toml",
+    "db:migrate:remote": "wrangler d1 migrations apply tooth-harmony-db --remote -c worker/wrangler.toml",
+    "db:seed:local": "wrangler d1 execute tooth-harmony-db --local --file worker/migrations/0002_seed.sql -c worker/wrangler.toml"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
