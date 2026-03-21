@@ -3,12 +3,6 @@ import { useI18n } from "@/shared/i18n";
 import { AppLayout } from "@/shared/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockPatients } from "@/features/patients/data";
-import { mockAppointments } from "@/features/appointments/data";
-import {
-  mockRevenueData, mockDoctorStats, mockProcedureStats, mockWeeklyAppointments,
-} from "@/features/dashboard/data";
-import { mockInvoices } from "@/features/finances/data";
 import { getInvoicePaid } from "@/features/finances/types";
 import { StatCard } from "./StatCard";
 import { DashboardSkeleton } from "@/shared/components/PageSkeleton";
@@ -19,6 +13,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area,
 } from "recharts";
+import { getAppointments, getDashboardStats, getDoctors, getFinanceInvoices, getTreatments } from "@/shared/api/crm";
+import type { Appointment } from "@/features/appointments/types";
+import type { Invoice } from "@/features/finances/types";
 
 const CHART_COLORS = [
   "hsl(var(--primary))",
@@ -36,16 +33,79 @@ function fmt(amount: number) {
 const DashboardPage = () => {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof getDashboardStats>> | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
+  const [treatments, setTreatments] = useState<Awaited<ReturnType<typeof getTreatments>>>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
+    Promise.all([getDashboardStats(), getAppointments(), getFinanceInvoices(), getDoctors(), getTreatments()])
+      .then(([dashboardStats, appointmentsData, invoicesData, doctorsData, treatmentsData]) => {
+        setStats(dashboardStats);
+        setAppointments(appointmentsData);
+        setInvoices(invoicesData);
+        setDoctors(doctorsData.map((doctor) => ({ id: doctor.id, name: doctor.name, specialty: doctor.specialty })));
+        setTreatments(treatmentsData);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const todayAppointments = mockAppointments.filter((a) => a.date === "2025-03-18");
-  const totalPaid = mockInvoices.reduce((s, inv) => s + getInvoicePaid(inv), 0);
-  const completedAppointments = mockAppointments.filter((a) => a.status === "completed").length;
-  const totalAppointments = mockAppointments.length;
+  const today = new Date().toISOString().split("T")[0];
+  const todayAppointments = appointments.filter((a) => a.date === today);
+  const totalPaid = invoices.reduce((s, inv) => s + getInvoicePaid(inv), 0);
+
+  const revenueByMonth = Array.from({ length: 6 }, (_, offset) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - offset));
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const month = date.toLocaleDateString("uk-UA", { month: "short" });
+    const monthInvoices = invoices.filter((invoice) => invoice.date.startsWith(monthKey));
+    const monthAppointments = appointments.filter((appointment) => appointment.date.startsWith(monthKey));
+
+    return {
+      month,
+      revenue: monthInvoices.reduce((sum, invoice) => sum + getInvoicePaid(invoice), 0),
+      appointments: monthAppointments.length,
+    };
+  });
+
+  const doctorStats = doctors.map((doctor) => {
+    const doctorAppointments = appointments.filter((appointment) => appointment.doctorName === doctor.name);
+    const doctorTreatments = treatments.filter((treatment) => treatment.doctor_name === doctor.name);
+    return {
+      name: doctor.name,
+      specialty: doctor.specialty || "Doctor",
+      appointments: doctorAppointments.length,
+      patients: new Set(doctorAppointments.map((appointment) => appointment.patientId)).size,
+      revenue: doctorTreatments.reduce((sum, treatment) => sum + Number(treatment.cost || 0), 0),
+    };
+  });
+
+  const procedureStats = Array.from(
+    treatments.reduce((map, treatment) => {
+      const key = treatment.procedure;
+      const current = map.get(key) || { name: key, count: 0, revenue: 0 };
+      current.count += 1;
+      current.revenue += Number(treatment.cost || 0);
+      map.set(key, current);
+      return map;
+    }, new Map<string, { name: string; count: number; revenue: number }>()),
+  ).map(([, value]) => value).sort((a, b) => b.revenue - a.revenue);
+
+  const weekStart = new Date();
+  const day = weekStart.getDay();
+  const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1);
+  weekStart.setDate(diff);
+  const weeklyAppointments = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    const key = date.toISOString().split("T")[0];
+    return {
+      day: date.toLocaleDateString("uk-UA", { weekday: "short" }),
+      count: appointments.filter((appointment) => appointment.date === key).length,
+    };
+  });
 
   if (loading) {
     return (
@@ -70,19 +130,19 @@ const DashboardPage = () => {
           />
           <StatCard
             title={t("dashboard.patients")}
-            value={String(mockPatients.length)}
+            value={String(stats?.totals.patients ?? 0)}
             icon={Users}
             color="bg-info/10 text-info"
           />
           <StatCard
             title={t("dashboard.appointments")}
-            value={String(todayAppointments.length)}
+            value={String(stats?.appointments.today ?? todayAppointments.length)}
             icon={CalendarDays}
             color="bg-warning/10 text-warning"
           />
           <StatCard
             title={t("dashboard.doctors")}
-            value={String(mockDoctorStats.length)}
+            value={String(stats?.totals.doctors ?? doctorStats.length)}
             icon={UserCheck}
             color="bg-success/10 text-success"
           />
@@ -116,7 +176,7 @@ const DashboardPage = () => {
                 <CardContent>
                   <div className="h-48 sm:h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={mockRevenueData}>
+                      <BarChart data={revenueByMonth}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
@@ -168,7 +228,7 @@ const DashboardPage = () => {
                 <CardContent>
                   <div className="h-48 sm:h-56">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={mockRevenueData}>
+                      <AreaChart data={revenueByMonth}>
                         <defs>
                           <linearGradient id="colorAppointments" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="hsl(var(--info))" stopOpacity={0.3} />
@@ -202,7 +262,7 @@ const DashboardPage = () => {
                 <CardContent>
                   <div className="h-48 sm:h-56">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={mockWeeklyAppointments}>
+                      <BarChart data={weeklyAppointments}>
                         <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                         <Tooltip
@@ -227,7 +287,7 @@ const DashboardPage = () => {
           <TabsContent value="doctors">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Doctor Cards */}
-              {mockDoctorStats.map((doc, i) => (
+              {doctorStats.map((doc) => (
                 <Card key={doc.name} className="shadow-card">
                   <CardContent className="p-5">
                     <div className="flex items-start gap-4 mb-4">
@@ -265,7 +325,7 @@ const DashboardPage = () => {
                 <CardContent>
                   <div className="h-48 sm:h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={mockDoctorStats} layout="vertical" margin={{ left: 10 }}>
+                      <BarChart data={doctorStats} layout="vertical" margin={{ left: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                         <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={100} />
@@ -299,7 +359,7 @@ const DashboardPage = () => {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={mockDoctorStats.map(d => ({ name: d.name, value: d.appointments }))}
+                          data={doctorStats.map(d => ({ name: d.name, value: d.appointments }))}
                           dataKey="value"
                           nameKey="name"
                           cx="50%"
@@ -308,7 +368,7 @@ const DashboardPage = () => {
                           innerRadius={40}
                           label={({ name, percent }) => `${name.replace('Др. ', '')} ${(percent * 100).toFixed(0)}%`}
                         >
-                          {mockDoctorStats.map((_, i) => (
+                          {doctorStats.map((_, i) => (
                             <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                           ))}
                         </Pie>
@@ -333,7 +393,7 @@ const DashboardPage = () => {
                 <CardContent>
                   <div className="h-56 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={mockProcedureStats} layout="vertical" margin={{ left: 20 }}>
+                      <BarChart data={procedureStats} layout="vertical" margin={{ left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                         <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={120} />
@@ -365,8 +425,8 @@ const DashboardPage = () => {
                   <div className="h-56 sm:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={mockProcedureStats} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
-                          {mockProcedureStats.map((_, i) => (
+                        <Pie data={procedureStats} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={70} label>
+                          {procedureStats.map((_, i) => (
                             <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                           ))}
                         </Pie>
@@ -385,8 +445,8 @@ const DashboardPage = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {mockProcedureStats.map((p, i) => {
-                      const maxRevenue = Math.max(...mockProcedureStats.map((x) => x.revenue));
+                    {procedureStats.map((p, i) => {
+                      const maxRevenue = Math.max(...procedureStats.map((x) => x.revenue), 1);
                       const pct = (p.revenue / maxRevenue) * 100;
                       return (
                         <div key={p.name} className="flex items-center gap-3 sm:gap-4">

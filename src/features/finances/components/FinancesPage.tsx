@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { mockInvoices } from "@/features/finances/data";
 import type { Invoice, MonthlyReport } from "@/features/finances/types";
 import { getInvoiceTotal, getInvoicePaid, getInvoiceBalance } from "@/features/finances/types";
 import { FinancesSkeleton } from "@/shared/components/PageSkeleton";
@@ -17,6 +16,7 @@ import env from "@/config/env";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { getFinanceInvoices } from "@/shared/api/crm";
 
 const statusVariant: Record<string, string> = {
   paid: "bg-success/10 text-success border-success/20",
@@ -61,29 +61,31 @@ const FinancesPage = () => {
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
+    getFinanceInvoices()
+      .then(setInvoices)
+      .finally(() => setLoading(false));
   }, []);
 
   const cur = env.defaultCurrency;
-  const totalPaid = mockInvoices.reduce((s, i) => s + getInvoicePaid(i), 0);
-  const totalPending = mockInvoices
+  const totalPaid = invoices.reduce((s, i) => s + getInvoicePaid(i), 0);
+  const totalPending = invoices
     .filter((i) => i.status === "pending" || i.status === "partial")
     .reduce((s, i) => s + getInvoiceBalance(i), 0);
-  const totalOverdue = mockInvoices
+  const totalOverdue = invoices
     .filter((i) => i.status === "overdue")
     .reduce((s, i) => s + getInvoiceBalance(i), 0);
-  const totalInvoiced = mockInvoices.reduce((s, i) => s + getInvoiceTotal(i), 0);
+  const totalInvoiced = invoices.reduce((s, i) => s + getInvoiceTotal(i), 0);
 
-  const report = buildMonthlyReport(mockInvoices);
+  const report = buildMonthlyReport(invoices);
 
   const statusCounts = [
-    { name: t("finances.paid"), value: mockInvoices.filter((i) => i.status === "paid").length },
-    { name: t("finances.pending"), value: mockInvoices.filter((i) => i.status === "pending").length },
-    { name: t("finances.partial"), value: mockInvoices.filter((i) => i.status === "partial").length },
-    { name: t("finances.overdue"), value: mockInvoices.filter((i) => i.status === "overdue").length },
+    { name: t("finances.paid"), value: invoices.filter((i) => i.status === "paid").length },
+    { name: t("finances.pending"), value: invoices.filter((i) => i.status === "pending").length },
+    { name: t("finances.partial"), value: invoices.filter((i) => i.status === "partial").length },
+    { name: t("finances.overdue"), value: invoices.filter((i) => i.status === "overdue").length },
   ].filter((s) => s.value > 0);
 
   if (loading) {
@@ -161,7 +163,7 @@ const FinancesPage = () => {
           <TabsContent value="invoices">
             <Card className="shadow-card">
               <CardContent className="pt-6">
-                {mockInvoices.length === 0 ? (
+                {invoices.length === 0 ? (
                   <EmptyState icon={Receipt} title={t("common.noData")} />
                 ) : (
                   <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -179,7 +181,7 @@ const FinancesPage = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {mockInvoices.map((inv) => {
+                        {invoices.map((inv) => {
                           const total = getInvoiceTotal(inv);
                           const paid = getInvoicePaid(inv);
                           const balance = getInvoiceBalance(inv);

@@ -153,6 +153,93 @@ function paginated(items, total, page, limit) {
   });
 }
 
+let systemInitPromise = null;
+
+function getConfigValue(env, key) {
+  if (env && env[key]) return env[key];
+  if (typeof process !== 'undefined' && process?.env?.[key]) return process.env[key];
+  return undefined;
+}
+
+async function ensureSchema(env) {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'administrator', full_name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, phone TEXT, email TEXT, date_of_birth TEXT, gender TEXT, address TEXT, notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS doctors (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, full_name TEXT NOT NULL, specialization TEXT, phone TEXT, email TEXT, color TEXT DEFAULT '#3B82F6', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL NOT NULL DEFAULT 0, duration_minutes INTEGER NOT NULL DEFAULT 30, category TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, service_id INTEGER, scheduled_at TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 30, status TEXT NOT NULL DEFAULT 'scheduled', notes TEXT, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS treatments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, appointment_id INTEGER, tooth_number INTEGER, diagnosis TEXT, procedure TEXT NOT NULL, notes TEXT, cost REAL NOT NULL DEFAULT 0, treated_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, treatment_id INTEGER, amount REAL NOT NULL DEFAULT 0, method TEXT NOT NULL DEFAULT 'cash', status TEXT NOT NULL DEFAULT 'paid', notes TEXT, paid_at TEXT NOT NULL DEFAULT (datetime('now')), created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS medical_files (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NOT NULL, tooth_number INTEGER, treatment_id INTEGER, doctor_id INTEGER, category TEXT NOT NULL DEFAULT 'document', file_name TEXT NOT NULL, mime_type TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, note TEXT, content_base64 TEXT NOT NULL, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE INDEX IF NOT EXISTS idx_patients_email ON patients(email)`,
+    `CREATE INDEX IF NOT EXISTS idx_doctors_user_id ON doctors(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON appointments(doctor_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_treatments_patient_id ON treatments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_treatments_doctor_id ON treatments(doctor_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_patient_id ON payments(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_medical_files_patient_id ON medical_files(patient_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_medical_files_tooth_number ON medical_files(tooth_number)`,
+  ];
+
+  for (const sql of statements) {
+    await env.DB.prepare(sql).run();
+  }
+}
+
+async function ensureSuperUser(env) {
+  const email = getConfigValue(env, 'SUPERUSER_EMAIL');
+  const password = getConfigValue(env, 'SUPERUSER_PASSWORD');
+  const fullName = getConfigValue(env, 'SUPERUSER_NAME') || 'System Superuser';
+  if (!email || !password) return;
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const passwordHash = await hashPassword(password);
+  const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
+
+  if (existing) {
+    await env.DB.prepare("UPDATE users SET password_hash = ?, role = 'superuser', full_name = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
+      .bind(passwordHash, fullName.trim(), existing.id)
+      .run();
+  } else {
+    await env.DB.prepare("INSERT INTO users (email, password_hash, role, full_name, active) VALUES (?, ?, 'superuser', ?, 1)")
+      .bind(normalizedEmail, passwordHash, fullName.trim())
+      .run();
+  }
+
+  const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(normalizedEmail).first();
+  const doctor = await env.DB.prepare('SELECT id FROM doctors WHERE user_id = ? OR email = ?').bind(user.id, normalizedEmail).first();
+
+  if (doctor) {
+    await env.DB.prepare("UPDATE doctors SET full_name = ?, email = ?, active = 1, updated_at = datetime('now') WHERE id = ?")
+      .bind(fullName.trim(), normalizedEmail, doctor.id)
+      .run();
+  } else {
+    await env.DB.prepare("INSERT INTO doctors (user_id, full_name, specialization, email, color, active) VALUES (?, ?, 'Administrator', ?, '#DC2626', 1)")
+      .bind(user.id, fullName.trim(), normalizedEmail)
+      .run();
+  }
+}
+
+async function ensureRoleMigration(env) {
+  await env.DB.prepare("UPDATE users SET role = 'administrator' WHERE role IN ('admin', 'staff', 'assistant')").run();
+}
+
+async function ensureSystem(env) {
+  if (!systemInitPromise) {
+    systemInitPromise = (async () => {
+      await ensureSchema(env);
+      await ensureRoleMigration(env);
+      await ensureSuperUser(env);
+    })().catch((error) => {
+      systemInitPromise = null;
+      throw error;
+    });
+  }
+
+  return systemInitPromise;
+}
+
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 
 async function authenticate(request, env) {
@@ -175,10 +262,18 @@ async function requireAuth(request, env) {
   return [user, null];
 }
 
+function isSuperuser(user) {
+  return user?.role === 'superuser';
+}
+
+function hasAnyRole(user, roles) {
+  return Boolean(user && (isSuperuser(user) || roles.includes(user.role)));
+}
+
 async function requireRole(request, env, ...roles) {
   const [user, authErr] = await requireAuth(request, env);
   if (authErr) return [null, authErr];
-  if (!roles.includes(user.role)) {
+  if (!hasAnyRole(user, roles)) {
     return [null, err(`Forbidden – required role: ${roles.join(' or ')}`, 403)];
   }
   return [user, null];
@@ -702,6 +797,106 @@ async function updatePayment(id, request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MEDICAL FILES
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function listMedicalFiles(request, env) {
+  const url = new URL(request.url);
+  const patientId = url.searchParams.get('patient_id');
+  const toothNumber = url.searchParams.get('tooth_number');
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+  const limit = Math.min(500, parseInt(url.searchParams.get('limit') || '200'));
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+  const params = [];
+  if (patientId) { conditions.push('mf.patient_id = ?'); params.push(patientId); }
+  if (toothNumber) { conditions.push('mf.tooth_number = ?'); params.push(toothNumber); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [rows, countRow] = await Promise.all([
+    env.DB.prepare(`
+      SELECT mf.id, mf.patient_id, mf.tooth_number, mf.treatment_id, mf.doctor_id, mf.category,
+        mf.file_name, mf.mime_type, mf.size_bytes, mf.note, mf.created_at, mf.updated_at,
+        p.full_name AS patient_name, d.full_name AS doctor_name
+      FROM medical_files mf
+      LEFT JOIN patients p ON mf.patient_id = p.id
+      LEFT JOIN doctors d ON mf.doctor_id = d.id
+      ${where} ORDER BY mf.created_at DESC LIMIT ? OFFSET ?
+    `).bind(...params, limit, offset).all(),
+    env.DB.prepare(`SELECT COUNT(*) as cnt FROM medical_files mf ${where}`)
+      .bind(...params).first(),
+  ]);
+
+  return paginated(rows.results, countRow.cnt, page, limit);
+}
+
+async function createMedicalFile(request, env, user) {
+  const body = await request.json().catch(() => ({}));
+  const missing = validateRequired(body, ['patient_id', 'file_name', 'content_base64']);
+  if (missing) return err(missing);
+
+  const r = await env.DB.prepare(`
+    INSERT INTO medical_files
+      (patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type, size_bytes, note, content_base64, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    body.patient_id,
+    body.tooth_number || null,
+    body.treatment_id || null,
+    body.doctor_id || null,
+    body.category || 'document',
+    body.file_name.trim(),
+    body.mime_type || 'application/octet-stream',
+    parseInt(body.size_bytes) || 0,
+    body.note || null,
+    body.content_base64,
+    user.id,
+  ).run();
+
+  const row = await env.DB.prepare(`
+    SELECT id, patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type,
+      size_bytes, note, created_at, updated_at
+    FROM medical_files
+    WHERE id = ?
+  `).bind(r.meta.last_row_id).first();
+
+  return ok(row);
+}
+
+async function getMedicalFile(id, env) {
+  const row = await env.DB.prepare(`
+    SELECT id, patient_id, tooth_number, treatment_id, doctor_id, category, file_name, mime_type,
+      size_bytes, note, created_at, updated_at
+    FROM medical_files
+    WHERE id = ?
+  `).bind(id).first();
+
+  if (!row) return err('Medical file not found', 404);
+  return ok(row);
+}
+
+async function downloadMedicalFile(id, env) {
+  const row = await env.DB.prepare(`
+    SELECT file_name, mime_type, content_base64
+    FROM medical_files
+    WHERE id = ?
+  `).bind(id).first();
+
+  if (!row) return err('Medical file not found', 404);
+
+  const binary = Uint8Array.from(atob(row.content_base64), (char) => char.charCodeAt(0));
+  return new Response(binary, {
+    status: 200,
+    headers: {
+      'Content-Type': row.mime_type || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${row.file_name}"`,
+      ...CORS,
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // USERS (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -716,7 +911,7 @@ async function createUser(request, env) {
   const body = await request.json().catch(() => ({}));
   const missing = validateRequired(body, ['email', 'password', 'full_name', 'role']);
   if (missing) return err(missing);
-  if (!['admin', 'doctor', 'staff'].includes(body.role)) return err('Invalid role');
+  if (!['superuser', 'administrator', 'doctor'].includes(body.role)) return err('Invalid role');
   const exists = await env.DB
     .prepare('SELECT id FROM users WHERE email = ?').bind(body.email.toLowerCase()).first();
   if (exists) return err('Email already registered', 409);
@@ -737,7 +932,7 @@ async function updateUser(id, request, env) {
   const updates = [];
   const vals = [];
   if (body.full_name) { updates.push('full_name = ?'); vals.push(body.full_name.trim()); }
-  if (body.role && ['admin','doctor','staff'].includes(body.role)) {
+  if (body.role && ['superuser', 'administrator', 'doctor'].includes(body.role)) {
     updates.push('role = ?'); vals.push(body.role);
   }
   if (body.active !== undefined) { updates.push('active = ?'); vals.push(body.active ? 1 : 0); }
@@ -886,6 +1081,7 @@ export default {
     const p = path.replace(/^\/api/, '').replace(/\/$/, '') || '/';
 
     try {
+      await ensureSystem(env);
       // ── Public routes ──────────────────────────────────────────────────────
       if (p === '/auth/login'    && method === 'POST') return handleLogin(request, env);
       if (p === '/auth/logout'   && method === 'POST') return ok({ message: 'Logged out' });
@@ -906,7 +1102,7 @@ export default {
         if (method === 'GET')    return getPatient(pm[1], env);
         if (method === 'PUT')    return updatePatient(pm[1], request, env);
         if (method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return deletePatient(pm[1], env);
         }
       }
@@ -915,14 +1111,14 @@ export default {
       if (p === '/doctors') {
         if (method === 'GET')  return listDoctors(request, env);
         if (method === 'POST') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return createDoctor(request, env);
         }
       }
       const dm = p.match(/^\/doctors\/(\d+)$/);
       if (dm) {
         if (method === 'PUT' || method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return method === 'PUT' ? updateDoctor(dm[1], request, env) : deleteDoctor(dm[1], env);
         }
       }
@@ -931,14 +1127,14 @@ export default {
       if (p === '/services') {
         if (method === 'GET')  return listServices(request, env);
         if (method === 'POST') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return createService(request, env);
         }
       }
       const sm = p.match(/^\/services\/(\d+)$/);
       if (sm) {
         if (method === 'PUT' || method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return method === 'PUT' ? updateService(sm[1], request, env) : deleteService(sm[1], env);
         }
       }
@@ -953,20 +1149,20 @@ export default {
         if (method === 'GET')    return getAppointment(am[1], env);
         if (method === 'PUT')    return updateAppointment(am[1], request, env);
         if (method === 'DELETE') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return deleteAppointment(am[1], env);
         }
       }
 
       // ── Treatments ───────────────────────────────────────────────────────
       if (p === '/treatments') {
-        if (!['doctor', 'admin'].includes(user.role)) return err('Forbidden', 403);
+        if (!hasAnyRole(user, ['doctor', 'administrator'])) return err('Forbidden', 403);
         if (method === 'GET')  return listTreatments(request, env);
         if (method === 'POST') return createTreatment(request, env);
       }
       const tm = p.match(/^\/treatments\/(\d+)$/);
       if (tm) {
-        if (!['doctor', 'admin'].includes(user.role)) return err('Forbidden', 403);
+        if (!hasAnyRole(user, ['doctor', 'administrator'])) return err('Forbidden', 403);
         if (method === 'GET') return getTreatment(tm[1], env);
         if (method === 'PUT') return updateTreatment(tm[1], request, env);
       }
@@ -979,20 +1175,29 @@ export default {
       const paym = p.match(/^\/payments\/(\d+)$/);
       if (paym) {
         if (method === 'PUT') {
-          if (user.role !== 'admin') return err('Forbidden', 403);
+          if (!isSuperuser(user)) return err('Forbidden', 403);
           return updatePayment(paym[1], request, env);
         }
       }
 
+      if (p === '/files') {
+        if (method === 'GET')  return listMedicalFiles(request, env);
+        if (method === 'POST') return createMedicalFile(request, env, user);
+      }
+      const fileMetaMatch = p.match(/^\/files\/(\d+)$/);
+      if (fileMetaMatch && method === 'GET') return getMedicalFile(fileMetaMatch[1], env);
+      const fileDownloadMatch = p.match(/^\/files\/(\d+)\/download$/);
+      if (fileDownloadMatch && method === 'GET') return downloadMedicalFile(fileDownloadMatch[1], env);
+
       // ── Users (admin) ────────────────────────────────────────────────────
       if (p === '/users') {
-        if (user.role !== 'admin') return err('Forbidden', 403);
+        if (!isSuperuser(user)) return err('Forbidden', 403);
         if (method === 'GET')  return listUsers(env);
         if (method === 'POST') return createUser(request, env);
       }
       const um = p.match(/^\/users\/(\d+)$/);
       if (um) {
-        if (user.role !== 'admin') return err('Forbidden', 403);
+        if (!isSuperuser(user)) return err('Forbidden', 403);
         if (method === 'PUT')    return updateUser(um[1], request, env);
         if (method === 'DELETE') return deleteUser(um[1], env);
       }

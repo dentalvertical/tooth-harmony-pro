@@ -2,12 +2,14 @@
  * Shared types used across multiple features
  */
 
-export type UserRole = 'admin' | 'doctor' | 'assistant';
+export type UserRole = 'superuser' | 'administrator' | 'doctor';
 
 export interface User {
+  id?: string;
   email: string;
   role: UserRole;
   clinicId: string;
+  fullName?: string;
 }
 
 export interface PaginatedResponse<T> {

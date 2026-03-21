@@ -10,15 +10,15 @@ import { Smile, Globe } from "lucide-react";
 import env from "@/config/env";
 
 const LoginPage = () => {
-  const [email, setEmail] = useState("admin@clinic.com");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState(import.meta.env.VITE_SUPERUSER_EMAIL || "admin@clinic.com");
+  const [password, setPassword] = useState(import.meta.env.VITE_SUPERUSER_PASSWORD || "password");
   const { login } = useAuth();
   const navigate = useNavigate();
   const { t, lang, setLang } = useI18n();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(email, password)) {
+    if (await login(email, password)) {
       navigate("/dashboard");
     }
   };
