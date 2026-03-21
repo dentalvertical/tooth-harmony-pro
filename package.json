@@ -11,7 +11,8 @@
     "preview": "npm run build && wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:worker": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-worker.ps1"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
