@@ -16,7 +16,7 @@ What it does:
 
 1. Forces Wrangler to use user-writable config/cache directories instead of the current shell directory.
 2. Finds or creates `tooth-harmony-pro-db` in the current Cloudflare account.
-3. Rewrites the local `database_id` in `wrangler.jsonc` and `worker/wrangler.toml`.
+3. Rewrites the local `database_id` in `wrangler.jsonc`.
 4. Uploads `JWT_SECRET` and `SUPERUSER_*` secrets to the root worker.
 5. Builds and deploys the single worker that serves both the frontend and `/api/*`.
 

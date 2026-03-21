@@ -1,4 +1,4 @@
-import apiWorker from "./worker/src/index.js";
+import apiWorker from "./src/server/api-worker.js";
 
 export default {
   async fetch(request, env) {

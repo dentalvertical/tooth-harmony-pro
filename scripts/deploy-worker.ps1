@@ -75,8 +75,6 @@ Set-Location $repoRoot
 Set-WranglerPaths
 
 $envMap = Get-KeyValueMap (Join-Path $repoRoot ".env")
-$workerEnvMap = Get-KeyValueMap (Join-Path $repoRoot "worker\.dev.vars")
-
 if (-not $env:CLOUDFLARE_API_TOKEN -and $envMap.ContainsKey("CLOUDFLARE_API_TOKEN")) {
   $env:CLOUDFLARE_API_TOKEN = $envMap["CLOUDFLARE_API_TOKEN"]
 }
@@ -91,12 +89,8 @@ if (-not $env:CLOUDFLARE_API_TOKEN) {
 $databaseName = "tooth-harmony-pro-db"
 $databaseId = Get-OrCreateDatabaseId $databaseName
 Update-ConfigFile (Join-Path $repoRoot "wrangler.jsonc") $databaseId
-Update-ConfigFile (Join-Path $repoRoot "worker\wrangler.toml") $databaseId
 
 $jwtSecret = $envMap["JWT_SECRET"]
-if (-not $jwtSecret) {
-  $jwtSecret = $workerEnvMap["JWT_SECRET"]
-}
 if (-not $jwtSecret) {
   $bytes = New-Object byte[] 48
   [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
@@ -104,15 +98,12 @@ if (-not $jwtSecret) {
 }
 
 $superuserEmail = $envMap["SUPERUSER_EMAIL"]
-if (-not $superuserEmail) { $superuserEmail = $workerEnvMap["SUPERUSER_EMAIL"] }
 if (-not $superuserEmail) { $superuserEmail = "superuser@clinic.local" }
 
 $superuserPassword = $envMap["SUPERUSER_PASSWORD"]
-if (-not $superuserPassword) { $superuserPassword = $workerEnvMap["SUPERUSER_PASSWORD"] }
 if (-not $superuserPassword) { $superuserPassword = "ChangeMe123!" }
 
 $superuserName = $envMap["SUPERUSER_NAME"]
-if (-not $superuserName) { $superuserName = $workerEnvMap["SUPERUSER_NAME"] }
 if (-not $superuserName) { $superuserName = "Clinic Superuser" }
 
 Set-Secret "JWT_SECRET" $jwtSecret
