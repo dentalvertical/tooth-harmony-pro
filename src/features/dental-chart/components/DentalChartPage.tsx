@@ -358,47 +358,63 @@ const DentalChartPage = () => {
                   <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     {text.upper}
                   </div>
-                  <div className="flex justify-center items-end overflow-x-auto py-2">
-                    <div className="flex min-w-max flex-nowrap items-end gap-[1px] md:gap-[2px]">
-                      {UPPER_TEETH.map((number) => {
-                        const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
-                        if (!tooth) return null;
+                  <div className="flex justify-center overflow-x-auto py-2">
+                    <div className="relative min-w-max">
+                      <img
+                        src="/teeth/white_up.png"
+                        alt="Upper jaw template"
+                        className="pointer-events-none h-[118px] w-auto max-w-none opacity-[0.12]"
+                        draggable={false}
+                      />
+                      <div className="absolute inset-0 flex items-end justify-start">
+                        {UPPER_TEETH.map((number) => {
+                          const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
+                          if (!tooth) return null;
 
-                        return (
-                          <Tooth
-                            key={number}
-                            number={number}
-                            isUpper
-                            record={tooth}
-                            selected={selectedTooth?.toothNumber === number}
-                            alignBottom
-                            onClick={() => setSelectedToothNumber(number)}
-                          />
-                        );
-                      })}
+                          return (
+                            <Tooth
+                              key={number}
+                              number={number}
+                              isUpper
+                              record={tooth}
+                              selected={selectedTooth?.toothNumber === number}
+                              alignBottom
+                              onClick={() => setSelectedToothNumber(number)}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-[32px] bg-[radial-gradient(circle_at_bottom,_rgba(255,255,255,0.98),_rgba(244,236,232,0.92)_55%,_rgba(248,244,240,0.86))] px-4 py-6 md:px-8 md:py-8">
-                  <div className="flex justify-center items-start overflow-x-auto py-2">
-                    <div className="flex min-w-max flex-nowrap items-start gap-[1px] md:gap-[2px]">
-                      {LOWER_TEETH.map((number) => {
-                        const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
-                        if (!tooth) return null;
+                  <div className="flex justify-center overflow-x-auto py-2">
+                    <div className="relative min-w-max">
+                      <img
+                        src="/teeth/white_down.png"
+                        alt="Lower jaw template"
+                        className="pointer-events-none h-[118px] w-auto max-w-none opacity-[0.12]"
+                        draggable={false}
+                      />
+                      <div className="absolute inset-0 flex items-start justify-start">
+                        {LOWER_TEETH.map((number) => {
+                          const tooth = patientChart.teeth.find((item) => item.toothNumber === number);
+                          if (!tooth) return null;
 
-                        return (
-                          <Tooth
-                            key={number}
-                            number={number}
-                            isUpper={false}
-                            record={tooth}
-                            selected={selectedTooth?.toothNumber === number}
-                            alignBottom={false}
-                            onClick={() => setSelectedToothNumber(number)}
-                          />
-                        );
-                      })}
+                          return (
+                            <Tooth
+                              key={number}
+                              number={number}
+                              isUpper={false}
+                              record={tooth}
+                              selected={selectedTooth?.toothNumber === number}
+                              alignBottom={false}
+                              onClick={() => setSelectedToothNumber(number)}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3 text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
