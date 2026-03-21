@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding      = "DB"
 database_name = "tooth-harmony-pro-db"
-database_id  = "949efb7f-902f-4249-abb0-4b2c7dcbc59e"
+database_id  = "963cb4d6-7ba6-4c9d-813e-177e408ea552"
 
 # ── Secrets (set via: npx wrangler secret put JWT_SECRET) ─────────────────────
 # JWT_SECRET  – use a long random string, e.g.:
