@@ -15,7 +15,7 @@ interface EnvConfig {
 
 const defaultApiBaseUrl = import.meta.env.DEV
   ? "/api"
-  : "https://tooth-harmony-pro.dentalvertical.workers.dev/api";
+  : "https://tooth-harmony-pro-api.dentalvertical.workers.dev/api";
 
 const env: EnvConfig = {
   apiBaseUrl: (import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl).replace(/\/$/, ""),
