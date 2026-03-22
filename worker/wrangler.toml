@@ -1,17 +1,15 @@
-name = "tooth-harmony-pro"
+name = "tooth-harmony-pro-api"
 main = "src/index.ts"
 compatibility_date = "2026-03-21"
 workers_dev = true
 
-[assets]
-directory = "../dist"
-not_found_handling = "single-page-application"
+
+
 
 [[d1_databases]]
 binding = "DB"
-database_name = "tooth-harmony-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "tooth-harmony-pro-db"
+database_id = "949efb7f-902f-4249-abb0-4b2c7dcbc59e"
 migrations_dir = "migrations"
 
-[vars]
-AUTH_SECRET = "change-me-in-production"
+

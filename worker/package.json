@@ -1,0 +1,11 @@
+{
+  "name": "tooth-harmony-pro",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy --no-bundle"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.17"
+  }
+}

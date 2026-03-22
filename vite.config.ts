@@ -5,6 +5,17 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return id.toString().split('node_modules/')[1].split('/')[0].toString();
+          }
+        },
+      },
+    },
+  },
   server: {
     host: "::",
     port: 8080,
@@ -13,41 +24,17 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8787',
+        target: 'https://tooth-harmony-pro.dentalvertical.workers.dev',
         changeOrigin: true,
       },
     },
   },
   plugins: [react()],
-   build: {
-    chunkSizeWarningLimit: 1000, // підняти поріг попередження до 1MB
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // React core
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          // UI бібліотеки
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-tooltip',
-          ],
-          // Форми та валідація
-          'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
-          // Дата та графіки
-          'vendor-data': ['date-fns', 'recharts'],
-          // State management
-          'vendor-state': ['zustand', '@tanstack/react-query'],
-        },
-      },
-    },
-  },
+  
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    dedupe: ["react", "react-dom", "react/jsx-runtime"],
   },
 }));
