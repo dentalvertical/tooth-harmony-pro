@@ -1,0 +1,8 @@
+name = "tooth-harmony-pro"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-03-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tooth-harmony-pro-db"
+database_id = "949efb7f-902f-4249-abb0-4b2c7dcbc59e"

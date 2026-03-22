@@ -3,10 +3,6 @@ main = "src/index.ts"
 compatibility_date = "2026-03-21"
 workers_dev = true
 
-routes = [
-  { pattern = "stomatcrmdentis.pp.ua/api/*", zone_name = "stomatcrmdentis.pp.ua" }
-]
-
 
 
 [[d1_databases]]
