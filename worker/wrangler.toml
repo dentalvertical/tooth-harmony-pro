@@ -4,7 +4,7 @@ compatibility_date = "2026-03-21"
 workers_dev = true
 
 routes = [
-  { pattern = "api.stomatcrmdentis.pp.ua", custom_domain = true }
+  { pattern = "stomatcrmdentis.pp.ua/api/*", zone_name = "stomatcrmdentis.pp.ua" }
 ]
 
 
@@ -14,4 +14,3 @@ binding = "DB"
 database_name = "tooth-harmony-pro-db"
 database_id = "949efb7f-902f-4249-abb0-4b2c7dcbc59e"
 migrations_dir = "migrations"
-

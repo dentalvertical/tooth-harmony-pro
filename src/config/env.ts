@@ -15,7 +15,7 @@ interface EnvConfig {
 
 const defaultApiBaseUrl = import.meta.env.DEV
   ? "/api"
-  : "https://api.stomatcrmdentis.pp.ua/api";
+  : "/api";
 
 const env: EnvConfig = {
   apiBaseUrl: (import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl).replace(/\/$/, ""),
