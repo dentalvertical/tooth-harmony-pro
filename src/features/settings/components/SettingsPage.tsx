@@ -39,6 +39,10 @@ const SettingsPage = () => {
   const { t, lang, setLang } = useI18n();
   const { user } = useAuth();
   const isSuperuser = user?.role === "superuser";
+  const isDoctor = user?.role === "doctor";
+  const isAdministrator = user?.role === "administrator";
+  const canCreateStaff = isSuperuser || isDoctor || isAdministrator;
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -53,9 +57,18 @@ const SettingsPage = () => {
   }, []);
 
   const availableRoles = useMemo(
-    () => (isSuperuser ? ["superuser", "administrator", "doctor"] : ["administrator", "doctor"]) as StaffMember["role"][],
+    () =>
+      (isSuperuser ? ["superuser", "administrator", "doctor"] : ["administrator", "doctor"]) as StaffMember["role"][],
     [isSuperuser],
   );
+
+  const canEditMember = (member: StaffMember) => isSuperuser || member.id === user?.id;
+
+  const canDeleteMember = (member: StaffMember) => {
+    if (member.id === user?.id) return false;
+    if (isSuperuser) return true;
+    return isDoctor && (member.role === "doctor" || member.role === "administrator");
+  };
 
   const handleSave = () => {
     toast({ title: t("common.success"), description: t("settings.saved") });
@@ -64,24 +77,26 @@ const SettingsPage = () => {
   const resetForm = () => {
     setForm({
       ...defaultForm,
-      role: isSuperuser ? "doctor" : "administrator",
+      role: "doctor",
     });
   };
 
   const openCreateForm = () => {
+    if (!canCreateStaff) return;
     setFormMode("create");
     resetForm();
     setShowForm(true);
   };
 
   const openEditForm = (member: StaffMember) => {
+    if (!canEditMember(member)) return;
     setFormMode("edit");
     setForm({
       id: member.id,
       name: member.name,
       email: member.email,
       password: "",
-      role: member.role === "superuser" && !isSuperuser ? "administrator" : member.role,
+      role: member.role,
     });
     setShowForm(true);
   };
@@ -99,16 +114,34 @@ const SettingsPage = () => {
     if (!form.name.trim() || !form.email.trim() || (formMode === "create" && !form.password.trim())) {
       toast({
         title: t("common.error"),
-        description: lang === "uk" ? "Заповніть ім'я, email і пароль." : "Fill in name, email, and password.",
+        description: lang === "uk" ? "Fill in name, email, and password." : "Fill in name, email, and password.",
         variant: "destructive",
       });
       return false;
     }
 
-    if (!isSuperuser && form.role === "superuser") {
+    if (formMode === "create" && !canCreateStaff) {
       toast({
         title: t("common.error"),
-        description: lang === "uk" ? "Недостатньо прав для ролі суперюзера." : "Not enough permissions for superuser role.",
+        description: lang === "uk" ? "You do not have permission to create users." : "You do not have permission to create users.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (formMode === "edit" && form.id !== user?.id && !isSuperuser) {
+      toast({
+        title: t("common.error"),
+        description: lang === "uk" ? "You can edit only your own profile." : "You can edit only your own profile.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!availableRoles.includes(form.role)) {
+      toast({
+        title: t("common.error"),
+        description: lang === "uk" ? "Selected role is not available for your access level." : "Selected role is not available for your access level.",
         variant: "destructive",
       });
       return false;
@@ -134,7 +167,7 @@ const SettingsPage = () => {
               id: form.id!,
               name: form.name,
               password: form.password || undefined,
-              role: form.role,
+              role: isSuperuser ? form.role : undefined,
             });
 
       upsertMember(saved);
@@ -142,9 +175,7 @@ const SettingsPage = () => {
       resetForm();
       toast({
         title: t("common.success"),
-        description: formMode === "create"
-          ? lang === "uk" ? "Користувача створено." : "User created."
-          : lang === "uk" ? "Користувача оновлено." : "User updated.",
+        description: formMode === "create" ? "User created." : "User updated.",
       });
     } catch (error) {
       toast({
@@ -158,7 +189,7 @@ const SettingsPage = () => {
   };
 
   const handleDeactivate = async (member: StaffMember) => {
-    if (!isSuperuser) return;
+    if (!canDeleteMember(member)) return;
 
     setSubmitting(true);
     try {
@@ -166,7 +197,7 @@ const SettingsPage = () => {
       setStaff((prev) => prev.filter((item) => item.id !== member.id));
       toast({
         title: t("common.success"),
-        description: lang === "uk" ? "Користувача деактивовано." : "User deactivated.",
+        description: "User deactivated.",
       });
     } catch (error) {
       toast({
@@ -232,7 +263,7 @@ const SettingsPage = () => {
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label>{t("settings.address")}</Label>
-                    <Input defaultValue="вул. Хрещатик 1, Київ, 01001" />
+                    <Input defaultValue="Khreshchatyk 1, Kyiv, 01001" />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("settings.language")}</Label>
@@ -243,7 +274,7 @@ const SettingsPage = () => {
                         onClick={() => setLang("uk")}
                         className={lang === "uk" ? "gradient-primary text-primary-foreground border-0" : ""}
                       >
-                        Українська
+                        Ukrainian
                       </Button>
                       <Button
                         variant={lang === "en" ? "default" : "outline"}
@@ -264,7 +295,7 @@ const SettingsPage = () => {
           </TabsContent>
 
           <TabsContent value="staff" className="mt-6 space-y-4">
-            {isSuperuser ? (
+            {canCreateStaff ? (
               <div className="flex justify-end">
                 <Button className="gradient-primary text-primary-foreground border-0 gap-2" onClick={openCreateForm}>
                   <Plus className="w-4 h-4" />
@@ -273,15 +304,15 @@ const SettingsPage = () => {
               </div>
             ) : null}
 
-            {showForm && isSuperuser ? (
+            {showForm && canCreateStaff ? (
               <Card className="shadow-card">
                 <CardContent className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>{lang === "uk" ? "Ім'я" : "Name"}</Label>
+                    <Label>Name</Label>
                     <Input
                       value={form.name}
                       onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                      placeholder={lang === "uk" ? "Повне ім'я" : "Full name"}
+                      placeholder="Full name"
                     />
                   </div>
 
@@ -302,7 +333,7 @@ const SettingsPage = () => {
                       type="password"
                       value={form.password}
                       onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-                      placeholder={formMode === "edit" ? (lang === "uk" ? "Новий пароль" : "New password") : "••••••••"}
+                      placeholder={formMode === "edit" ? "New password" : "Password"}
                     />
                   </div>
 
@@ -310,6 +341,7 @@ const SettingsPage = () => {
                     <Label>{t("settings.role")}</Label>
                     <Select
                       value={form.role}
+                      disabled={!isSuperuser && formMode === "edit"}
                       onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as StaffMember["role"] }))}
                     >
                       <SelectTrigger>
@@ -327,11 +359,7 @@ const SettingsPage = () => {
 
                   <div className="md:col-span-2 flex gap-3">
                     <Button onClick={() => void handleSubmitForm()} disabled={submitting}>
-                      {submitting
-                        ? lang === "uk" ? "Збереження..." : "Saving..."
-                        : formMode === "create"
-                          ? t("settings.addStaff")
-                          : lang === "uk" ? "Оновити" : "Update"}
+                      {submitting ? "Saving..." : formMode === "create" ? t("settings.addStaff") : "Update"}
                     </Button>
                     <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
                       {t("common.cancel")}
@@ -346,9 +374,9 @@ const SettingsPage = () => {
                 <CardContent className="flex items-center gap-3 p-4 text-sm text-muted-foreground">
                   <ShieldX className="h-4 w-4 flex-shrink-0" />
                   <span>
-                    {lang === "uk"
-                      ? "Створення, редагування і деактивація користувачів доступні тільки суперюзеру."
-                      : "Creating, editing, and deactivating users is available to superusers only."}
+                    {isDoctor
+                      ? "You can create administrators and doctors, edit only yourself, and delete administrators or doctors."
+                      : "You can create administrators and doctors, edit only yourself, and you cannot delete users."}
                   </span>
                 </CardContent>
               </Card>
@@ -373,13 +401,15 @@ const SettingsPage = () => {
                       </span>
                     </div>
 
-                    {isSuperuser ? (
+                    {canEditMember(member) || canDeleteMember(member) ? (
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="gap-2" onClick={() => openEditForm(member)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                          {lang === "uk" ? "Редагувати" : "Edit"}
-                        </Button>
-                        {member.id !== user?.id ? (
+                        {canEditMember(member) ? (
+                          <Button variant="outline" size="sm" className="gap-2" onClick={() => openEditForm(member)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                        ) : null}
+                        {canDeleteMember(member) ? (
                           <Button
                             variant="outline"
                             size="sm"
@@ -387,7 +417,7 @@ const SettingsPage = () => {
                             onClick={() => void handleDeactivate(member)}
                           >
                             <ShieldX className="h-3.5 w-3.5" />
-                            {lang === "uk" ? "Деактивувати" : "Deactivate"}
+                            Deactivate
                           </Button>
                         ) : null}
                       </div>

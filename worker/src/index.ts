@@ -225,12 +225,57 @@ async function ensureRoleMigration(env) {
   await env.DB.prepare("UPDATE users SET role = 'administrator' WHERE role IN ('admin', 'staff', 'assistant')").run();
 }
 
+async function syncDoctorProfiles(env) {
+  const users = await env.DB
+    .prepare("SELECT id, email, role, full_name, active FROM users WHERE role IN ('doctor', 'superuser')")
+    .all();
+
+  for (const user of users.results) {
+    const existingDoctor = await env.DB
+      .prepare('SELECT id FROM doctors WHERE user_id = ? OR email = ?')
+      .bind(user.id, user.email)
+      .first();
+
+    const color = user.role === 'superuser' ? '#DC2626' : '#3B82F6';
+    const specialization = user.role === 'superuser' ? 'Administrator' : 'Dentist';
+
+    if (existingDoctor) {
+      await env.DB.prepare(`
+        UPDATE doctors
+        SET user_id = ?, full_name = ?, specialization = ?, email = ?, color = ?, active = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).bind(
+        user.id,
+        user.full_name,
+        specialization,
+        user.email,
+        color,
+        user.active ? 1 : 0,
+        existingDoctor.id,
+      ).run();
+    } else {
+      await env.DB.prepare(`
+        INSERT INTO doctors (user_id, full_name, specialization, email, color, active)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        user.id,
+        user.full_name,
+        specialization,
+        user.email,
+        color,
+        user.active ? 1 : 0,
+      ).run();
+    }
+  }
+}
+
 async function ensureSystem(env) {
   if (!systemInitPromise) {
     systemInitPromise = (async () => {
       await ensureSchema(env);
       await ensureRoleMigration(env);
       await ensureSuperUser(env);
+      await syncDoctorProfiles(env);
     })().catch((error) => {
       systemInitPromise = null;
       throw error;
@@ -268,6 +313,79 @@ function isSuperuser(user) {
 
 function hasAnyRole(user, roles) {
   return Boolean(user && (isSuperuser(user) || roles.includes(user.role)));
+}
+
+function canManageRole(actor, role) {
+  if (isSuperuser(actor)) return true;
+  if (!actor) return false;
+  if (!['doctor', 'administrator'].includes(actor.role)) return false;
+  return role === 'doctor' || role === 'administrator';
+}
+
+function canEditUser(actor, targetUserId) {
+  if (isSuperuser(actor)) return true;
+  return Boolean(actor && String(actor.id) === String(targetUserId));
+}
+
+function canDeleteUser(actor, targetRole) {
+  if (isSuperuser(actor)) return true;
+  return actor?.role === 'doctor' && (targetRole === 'doctor' || targetRole === 'administrator');
+}
+
+async function setDoctorProfileForUser(env, userId, options = {}) {
+  const user = await env.DB
+    .prepare('SELECT id, email, role, full_name, active FROM users WHERE id = ?')
+    .bind(userId)
+    .first();
+  if (!user) return;
+
+  const existingDoctor = await env.DB
+    .prepare('SELECT id FROM doctors WHERE user_id = ? OR email = ?')
+    .bind(user.id, user.email)
+    .first();
+
+  if (user.role !== 'doctor' && user.role !== 'superuser') {
+    if (existingDoctor) {
+      await env.DB.prepare("UPDATE doctors SET active = 0, updated_at = datetime('now') WHERE id = ?")
+        .bind(existingDoctor.id)
+        .run();
+    }
+    return;
+  }
+
+  const specialization = options.specialization || (user.role === 'superuser' ? 'Administrator' : 'Dentist');
+  const phone = options.phone || null;
+  const color = options.color || (user.role === 'superuser' ? '#DC2626' : '#3B82F6');
+
+  if (existingDoctor) {
+    await env.DB.prepare(`
+      UPDATE doctors
+      SET user_id = ?, full_name = ?, specialization = ?, phone = COALESCE(?, phone), email = ?, color = ?, active = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(
+      user.id,
+      user.full_name,
+      specialization,
+      phone,
+      user.email,
+      color,
+      user.active ? 1 : 0,
+      existingDoctor.id,
+    ).run();
+  } else {
+    await env.DB.prepare(`
+      INSERT INTO doctors (user_id, full_name, specialization, phone, email, color, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      user.id,
+      user.full_name,
+      specialization,
+      phone,
+      user.email,
+      color,
+      user.active ? 1 : 0,
+    ).run();
+  }
 }
 
 async function requireRole(request, env, ...roles) {
@@ -907,11 +1025,12 @@ async function listUsers(env) {
   return ok(rows.results);
 }
 
-async function createUser(request, env) {
+async function createUser(request, env, actor) {
   const body = await request.json().catch(() => ({}));
   const missing = validateRequired(body, ['email', 'password', 'full_name', 'role']);
   if (missing) return err(missing);
   if (!['superuser', 'administrator', 'doctor'].includes(body.role)) return err('Invalid role');
+  if (!canManageRole(actor, body.role)) return err('Forbidden', 403);
   const exists = await env.DB
     .prepare('SELECT id FROM users WHERE email = ?').bind(body.email.toLowerCase()).first();
   if (exists) return err('Email already registered', 409);
@@ -922,20 +1041,30 @@ async function createUser(request, env) {
   const user = await env.DB
     .prepare('SELECT id, email, role, full_name, active, created_at FROM users WHERE id = ?')
     .bind(r.meta.last_row_id).first();
+  await setDoctorProfileForUser(env, r.meta.last_row_id);
   return ok(user);
 }
 
-async function updateUser(id, request, env) {
-  const exists = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first();
-  if (!exists) return err('User not found', 404);
+async function updateUser(id, request, env, actor) {
+  const existingUser = await env.DB
+    .prepare('SELECT id, email, role, full_name, active FROM users WHERE id = ?')
+    .bind(id)
+    .first();
+  if (!existingUser) return err('User not found', 404);
+  if (!canEditUser(actor, id)) return err('Forbidden', 403);
   const body = await request.json().catch(() => ({}));
   const updates = [];
   const vals = [];
   if (body.full_name) { updates.push('full_name = ?'); vals.push(body.full_name.trim()); }
   if (body.role && ['superuser', 'administrator', 'doctor'].includes(body.role)) {
+    if (!isSuperuser(actor)) return err('Only superuser can change roles', 403);
+    if (!canManageRole(actor, body.role)) return err('Forbidden', 403);
     updates.push('role = ?'); vals.push(body.role);
   }
-  if (body.active !== undefined) { updates.push('active = ?'); vals.push(body.active ? 1 : 0); }
+  if (body.active !== undefined) {
+    if (!isSuperuser(actor)) return err('Only superuser can change active state', 403);
+    updates.push('active = ?'); vals.push(body.active ? 1 : 0);
+  }
   if (body.password) {
     const h = await hashPassword(body.password);
     updates.push('password_hash = ?'); vals.push(h);
@@ -943,15 +1072,21 @@ async function updateUser(id, request, env) {
   if (!updates.length) return err('No updatable fields provided');
   updates.push("updated_at = datetime('now')");
   await env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...vals, id).run();
+  await setDoctorProfileForUser(env, id);
   return ok(await env.DB
     .prepare('SELECT id, email, role, full_name, active, created_at FROM users WHERE id = ?')
     .bind(id).first());
 }
 
-async function deleteUser(id, env) {
-  const exists = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(id).first();
-  if (!exists) return err('User not found', 404);
+async function deleteUser(id, env, actor) {
+  const existingUser = await env.DB
+    .prepare('SELECT id, email, role, full_name, active FROM users WHERE id = ?')
+    .bind(id)
+    .first();
+  if (!existingUser) return err('User not found', 404);
+  if (!canDeleteUser(actor, existingUser.role)) return err('Forbidden', 403);
   await env.DB.prepare('UPDATE users SET active = 0 WHERE id = ?').bind(id).run();
+  await setDoctorProfileForUser(env, id);
   return ok({ deleted: true, id: parseInt(id) });
 }
 
@@ -1191,15 +1326,13 @@ export default {
 
       // ── Users (admin) ────────────────────────────────────────────────────
       if (p === '/users') {
-        if (!isSuperuser(user)) return err('Forbidden', 403);
         if (method === 'GET')  return listUsers(env);
-        if (method === 'POST') return createUser(request, env);
+        if (method === 'POST') return createUser(request, env, user);
       }
       const um = p.match(/^\/users\/(\d+)$/);
       if (um) {
-        if (!isSuperuser(user)) return err('Forbidden', 403);
-        if (method === 'PUT')    return updateUser(um[1], request, env);
-        if (method === 'DELETE') return deleteUser(um[1], env);
+        if (method === 'PUT')    return updateUser(um[1], request, env, user);
+        if (method === 'DELETE') return deleteUser(um[1], env, user);
       }
 
       // ── Dashboard ────────────────────────────────────────────────────────
