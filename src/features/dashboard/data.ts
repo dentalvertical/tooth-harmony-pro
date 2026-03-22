@@ -1,10 +1,10 @@
 export const mockRevenueData = [
-  { month: 'Січ', revenue: 45000, appointments: 38 },
-  { month: 'Лют', revenue: 52000, appointments: 42 },
-  { month: 'Бер', revenue: 48000, appointments: 35 },
-  { month: 'Кві', revenue: 61000, appointments: 51 },
-  { month: 'Тра', revenue: 55000, appointments: 44 },
-  { month: 'Чер', revenue: 67000, appointments: 56 },
+  { month: 'Січень', revenue: 45000, appointments: 38 },
+  { month: 'Лютий', revenue: 52000, appointments: 42 },
+  { month: 'Березень', revenue: 48000, appointments: 35 },
+  { month: 'Квітень', revenue: 61000, appointments: 51 },
+  { month: 'Травень', revenue: 55000, appointments: 44 },
+  { month: 'Черень', revenue: 67000, appointments: 56 },
 ];
 
 export const mockDoctorStats = [
