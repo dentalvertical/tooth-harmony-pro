@@ -16,9 +16,10 @@ interface PatientTableProps {
   onView: (patient: Patient) => void;
   onEdit: (patient: Patient) => void;
   onDelete: (id: string) => void;
+  canDelete?: boolean;
 }
 
-export function PatientTable({ patients, onView, onEdit, onDelete }: PatientTableProps) {
+export function PatientTable({ patients, onView, onEdit, onDelete, canDelete = false }: PatientTableProps) {
   const { t } = useI18n();
 
   return (
@@ -48,9 +49,11 @@ export function PatientTable({ patients, onView, onEdit, onDelete }: PatientTabl
                   <Button variant="ghost" size="icon" onClick={() => onEdit(p)}>
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => onDelete(p.id)} className="text-destructive">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {canDelete ? (
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(p.id)} className="text-destructive">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  ) : null}
                 </div>
               </TableCell>
             </TableRow>

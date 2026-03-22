@@ -16,10 +16,12 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { createPatient, deletePatient as removePatient, getAppointments, getPatients } from "@/shared/api/crm";
 import type { Appointment } from "@/features/appointments/types";
+import { useAuth } from "@/features/auth/store";
 
 const PatientsPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -34,8 +36,15 @@ const PatientsPage = () => {
         setPatients(patientList);
         setAppointments(appointmentList);
       })
+      .catch((error) => {
+        toast({
+          title: t("common.error"),
+          description: error instanceof Error ? error.message : t("common.errorMessage"),
+          variant: "destructive",
+        });
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   const filtered = patients.filter(
     (p) =>
@@ -45,18 +54,34 @@ const PatientsPage = () => {
   );
 
   const handleAdd = async (data: { fullName: string; phone: string; email: string; notes: string }) => {
-    const patient = await createPatient(data);
-    setPatients((prev) => [patient, ...prev]);
-    setShowAdd(false);
-    toast({ title: t("common.success"), description: t("patients.added") });
+    try {
+      const patient = await createPatient(data);
+      setPatients((prev) => [patient, ...prev]);
+      setShowAdd(false);
+      toast({ title: t("common.success"), description: t("patients.added") });
+    } catch (error) {
+      toast({
+        title: t("common.error"),
+        description: error instanceof Error ? error.message : t("common.errorMessage"),
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
-    await removePatient(deleteTarget);
-    setPatients(patients.filter((p) => p.id !== deleteTarget));
-    setDeleteTarget(null);
-    toast({ title: t("common.success"), description: t("patients.deleted") });
+    try {
+      await removePatient(deleteTarget);
+      setPatients((prev) => prev.filter((p) => p.id !== deleteTarget));
+      setDeleteTarget(null);
+      toast({ title: t("common.success"), description: t("patients.deleted") });
+    } catch (error) {
+      toast({
+        title: t("common.error"),
+        description: error instanceof Error ? error.message : t("common.errorMessage"),
+        variant: "destructive",
+      });
+    }
   };
 
   const patientHistory = showProfile
@@ -99,6 +124,7 @@ const PatientsPage = () => {
                 onView={(p) => setShowProfile(p)}
                 onEdit={(p) => navigate(`/dental-chart?patient=${p.id}`)}
                 onDelete={(id) => setDeleteTarget(id)}
+                canDelete={user?.role === "superuser"}
               />
             ) : (
               <EmptyState icon={Users} title={t("common.noData")} />

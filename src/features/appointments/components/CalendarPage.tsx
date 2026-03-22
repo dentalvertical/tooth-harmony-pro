@@ -24,7 +24,24 @@ interface PatientOption {
   fullName: string;
 }
 
-const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function combineAppointmentNames(
+  appointment: Appointment,
+  patients: PatientOption[],
+  doctors: DoctorOption[],
+  fallback: { patientId: string; doctorId: string; notes?: string },
+): Appointment {
+  const patientName = patients.find((patient) => patient.id === fallback.patientId)?.fullName || appointment.patientName;
+  const doctorName = doctors.find((doctor) => doctor.id === fallback.doctorId)?.name || appointment.doctorName;
+
+  return {
+    ...appointment,
+    patientName,
+    doctorName,
+    procedure: appointment.procedure || fallback.notes || "Visit",
+  };
+}
 
 const CalendarPage = () => {
   const { t } = useI18n();
@@ -56,6 +73,13 @@ const CalendarPage = () => {
           })),
         );
         setDoctors(doctorsData);
+      })
+      .catch((error) => {
+        toast({
+          title: t("calendar.title"),
+          description: error instanceof Error ? error.message : "Failed to load calendar.",
+          variant: "destructive",
+        });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -108,7 +132,7 @@ const CalendarPage = () => {
     if (!form.patientId || !form.doctorId || !form.date || !form.time) {
       toast({
         title: t("calendar.title"),
-        description: "Заповніть пацієнта, лікаря, дату і час.",
+        description: "Select a patient, doctor, date, and time.",
         variant: "destructive",
       });
       return;
@@ -123,17 +147,20 @@ const CalendarPage = () => {
         time: form.time,
         notes: form.notes,
       });
-      setAppointments((prev) => [...prev, created].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)));
+      const enriched = combineAppointmentNames(created, patients, doctors, form);
+      setAppointments((prev) =>
+        [...prev, enriched].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)),
+      );
       setShowForm(false);
       resetForm();
       toast({
         title: t("calendar.title"),
-        description: "Візит створено.",
+        description: "Appointment created.",
       });
     } catch (error) {
       toast({
         title: t("calendar.title"),
-        description: error instanceof Error ? error.message : "Не вдалося створити візит.",
+        description: error instanceof Error ? error.message : "Failed to create appointment.",
         variant: "destructive",
       });
     } finally {
@@ -173,10 +200,10 @@ const CalendarPage = () => {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <div className="space-y-2">
-                <Label>Пацієнт</Label>
+                <Label>Patient</Label>
                 <Select value={form.patientId} onValueChange={(value) => setForm((prev) => ({ ...prev, patientId: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Оберіть пацієнта" />
+                    <SelectValue placeholder="Select patient" />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
@@ -189,10 +216,10 @@ const CalendarPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Лікар</Label>
+                <Label>Doctor</Label>
                 <Select value={form.doctorId} onValueChange={(value) => setForm((prev) => ({ ...prev, doctorId: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Оберіть лікаря" />
+                    <SelectValue placeholder="Select doctor" />
                   </SelectTrigger>
                   <SelectContent>
                     {doctors.map((doctor) => (
@@ -205,7 +232,7 @@ const CalendarPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Дата</Label>
+                <Label>Date</Label>
                 <Input
                   type="date"
                   value={form.date}
@@ -214,7 +241,7 @@ const CalendarPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Час</Label>
+                <Label>Time</Label>
                 <Input
                   type="time"
                   value={form.time}
@@ -223,7 +250,7 @@ const CalendarPage = () => {
               </div>
 
               <div className="space-y-2 xl:col-span-1">
-                <Label>Нотатка / послуга</Label>
+                <Label>Note / service</Label>
                 <Textarea
                   rows={3}
                   value={form.notes}
@@ -233,10 +260,10 @@ const CalendarPage = () => {
 
               <div className="md:col-span-2 xl:col-span-5 flex gap-3">
                 <Button onClick={() => void handleCreateAppointment()} disabled={submitting}>
-                  {submitting ? "Збереження..." : "Створити візит"}
+                  {submitting ? "Saving..." : "Create appointment"}
                 </Button>
                 <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
-                  Скасувати
+                  Cancel
                 </Button>
               </div>
             </CardContent>
@@ -291,7 +318,7 @@ const CalendarPage = () => {
                           {appts.map((a) => (
                             <div key={a.id} className="p-2 sm:p-2.5 mb-1 rounded-lg gradient-primary text-primary-foreground text-sm">
                               <p className="font-medium truncate">{a.patientName}</p>
-                              <p className="text-xs opacity-80 truncate">{a.time} · {a.procedure} · {a.doctorName}</p>
+                              <p className="text-xs opacity-80 truncate">{a.time} В· {a.procedure} В· {a.doctorName}</p>
                             </div>
                           ))}
                         </div>
