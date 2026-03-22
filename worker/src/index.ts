@@ -291,7 +291,9 @@ async function authenticate(request, env) {
   const auth = request.headers.get('Authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
   const token = auth.slice(7).trim();
-  const payload = await verifyJWT(token, env.JWT_SECRET);
+  const jwtSecret = getConfigValue(env, 'JWT_SECRET');
+  if (!jwtSecret) return null;
+  const payload = await verifyJWT(token, jwtSecret);
   if (!payload) return null;
   const user = await env.DB
     .prepare('SELECT id, email, role, full_name, active FROM users WHERE id = ?')
@@ -446,10 +448,13 @@ async function handleLogin(request, env) {
 
   if (!valid) return err('Invalid credentials', 401);
 
+  const jwtSecret = getConfigValue(env, 'JWT_SECRET');
+  if (!jwtSecret) return err('JWT secret is not configured', 500);
+
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 24 h
   const token = await signJWT(
     { sub: user.id, email: user.email, role: user.role, exp },
-    env.JWT_SECRET
+    jwtSecret
   );
 
   return ok({
