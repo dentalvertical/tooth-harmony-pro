@@ -13,8 +13,12 @@ interface EnvConfig {
   maxUploadSizeMB: number;
 }
 
+const defaultApiBaseUrl = import.meta.env.DEV
+  ? "/api"
+  : "https://tooth-harmony-pro.dentalvertical.workers.dev/api";
+
 const env: EnvConfig = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '/api',
+  apiBaseUrl: (import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl).replace(/\/$/, ""),
   appName: import.meta.env.VITE_APP_NAME || 'DentaCRM',
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,
